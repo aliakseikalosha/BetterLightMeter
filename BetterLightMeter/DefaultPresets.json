@@ -1,0 +1,98 @@
+{
+  "cameras": [
+    {
+      "name": "Minolta X-700",
+      "iso": { "min": 12, "max": 3200 },
+      "shutter": { "min": "4", "max": "1/1000", "fullStops": true },
+      "lenses": [
+        { "name": "Minolta MD 28mm f/2.8", "aperture": { "min": 2.8, "max": 22 } },
+        { "name": "Minolta MD 50mm f/1.4", "aperture": { "min": 1.4, "max": 16 } }
+      ]
+    },
+    {
+      "name": "Pentax 17",
+      "iso": { "min": 50, "max": 3200 },
+      "lenses": [
+        {
+          "name": "HD Pentax 25mm f/3.5",
+          "aperture": { "min": 3.5, "max": 16 },
+          "shutter": { "min": "4", "max": "1/350" }
+        }
+      ]
+    },
+    {
+      "name": "Leica M6",
+      "iso": { "min": 6, "max": 6400 },
+      "shutter": { "min": "1", "max": "1/1000", "fullStops": true },
+      "lenses": [
+        { "name": "Summicron-M 35mm f/2", "aperture": { "min": 2, "max": 16 } },
+        { "name": "Summilux-M 50mm f/1.4", "aperture": { "min": 1.4, "max": 16 } },
+        { "name": "Elmarit-M 90mm f/2.8", "aperture": { "min": 2.8, "max": 22 } }
+      ]
+    },
+    {
+      "name": "Nikon F3",
+      "iso": { "min": 12, "max": 6400 },
+      "shutter": { "min": "8", "max": "1/2000", "fullStops": true },
+      "lenses": [
+        { "name": "Nikkor 28mm f/2.8 AI-S", "aperture": { "min": 2.8, "max": 22 } },
+        { "name": "Nikkor 50mm f/1.4 AI-S", "aperture": { "min": 1.4, "max": 16 } },
+        { "name": "Nikkor 105mm f/2.5 AI-S", "aperture": { "min": 2.5, "max": 22 } }
+      ]
+    },
+    {
+      "name": "Pentax K1000",
+      "iso": { "min": 20, "max": 3200 },
+      "shutter": { "min": "1", "max": "1/1000", "fullStops": true },
+      "lenses": [
+        { "name": "SMC Pentax-M 50mm f/2", "aperture": { "min": 2, "max": 22 } },
+        { "name": "SMC Pentax-M 28mm f/3.5", "aperture": { "min": 3.5, "max": 22 } }
+      ]
+    },
+    {
+      "name": "Hasselblad 500C/M",
+      "lenses": [
+        {
+          "name": "Planar C 80mm f/2.8",
+          "aperture": { "min": 2.8, "max": 22 },
+          "shutter": { "min": "1", "max": "1/500", "fullStops": true }
+        },
+        {
+          "name": "Distagon C 50mm f/4",
+          "aperture": { "min": 4, "max": 32 },
+          "shutter": { "min": "1", "max": "1/500", "fullStops": true }
+        },
+        {
+          "name": "Sonnar C 150mm f/4",
+          "aperture": { "min": 4, "max": 32 },
+          "shutter": { "min": "1", "max": "1/500", "fullStops": true }
+        }
+      ]
+    },
+    {
+      "name": "Mamiya 7 II",
+      "lenses": [
+        {
+          "name": "N 43mm f/4.5",
+          "aperture": { "min": 4.5, "max": 22 },
+          "shutter": { "min": "4", "max": "1/500" }
+        },
+        {
+          "name": "N 80mm f/4",
+          "aperture": { "min": 4, "max": 22 },
+          "shutter": { "min": "4", "max": "1/500" }
+        }
+      ]
+    },
+    {
+      "name": "Fujifilm GW690III",
+      "lenses": [
+        {
+          "name": "EBC Fujinon 90mm f/3.5",
+          "aperture": { "min": 3.5, "max": 32 },
+          "shutter": { "min": "1", "max": "1/500", "fullStops": true }
+        }
+      ]
+    }
+  ]
+}
