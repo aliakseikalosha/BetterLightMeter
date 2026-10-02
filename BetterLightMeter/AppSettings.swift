@@ -35,7 +35,13 @@ final class AppSettings {
         didSet { defaults.set(saveLocation, forKey: "saveLocation") }
     }
 
+    /// Whether the viewfinder is zoomed to match the selected lens on the selected camera.
+    var simulateLens: Bool {
+        didSet { defaults.set(simulateLens, forKey: "simulateLens") }
+    }
+
     init() {
+        simulateLens = defaults.object(forKey: "simulateLens") as? Bool ?? true
         saveLocation = defaults.object(forKey: "saveLocation") as? Bool ?? true
         // nil = never chosen (use the default), "" = the user picked "None".
         if let storedCamera = defaults.string(forKey: "cameraName") {
@@ -122,6 +128,12 @@ struct EffectiveLimits {
 
     var all: [ExposureSetting: [Int]] {
         Dictionary(uniqueKeysWithValues: ExposureSetting.allCases.map { ($0, allowedIndices(for: $0)) })
+    }
+
+    /// Focal length that gives the lens' field of view on a 35mm full-frame camera.
+    var equivalentFocalLength: Double? {
+        guard let focalLength = lens?.focalLength else { return nil }
+        return focalLength * (camera?.cropFactor ?? 1)
     }
 
     func describe(_ setting: ExposureSetting) -> String {

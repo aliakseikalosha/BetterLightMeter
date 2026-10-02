@@ -93,6 +93,20 @@ struct SettingsView: View {
                         .monospacedDigit()
                 }
             }
+
+            if let camera {
+                LabeledContent("Crop factor") {
+                    Text(String(format: "%.2gx", camera.cropFactor ?? 1))
+                        .monospacedDigit()
+                }
+            }
+            if let focalLength = lens?.focalLength {
+                LabeledContent("Focal length") {
+                    Text("\(Int(focalLength.rounded())) mm")
+                        .monospacedDigit()
+                }
+            }
+            Toggle("Simulate Lens View", isOn: $settings.simulateLens)
         } header: {
             Text("Camera & Lens")
         } footer: {
@@ -296,14 +310,17 @@ struct SettingsView: View {
           "shutter": { "min": "1", "max": "1/1000", "fullStops": true },
           "lenses": [
             { "name": "Summicron 35mm f/2",
+              "focalLength": 35,
               "aperture": { "min": 2, "max": 16 } }
           ]
         },
         {
           "name": "Hasselblad 500C/M",
+          "cropFactor": 0.55,
           "iso": 400,
           "lenses": [
             { "name": "Planar 80mm f/2.8",
+              "focalLength": 80,
               "aperture": { "min": 2.8, "max": 22 },
               "shutter": { "min": "1", "max": "1/500",
                            "fullStops": true } }

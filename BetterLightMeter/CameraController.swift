@@ -17,6 +17,9 @@ final class CameraController {
     /// Exposure compensation in EV, like the sun slider in the Camera app.
     private(set) var bias: Float = 0
     private(set) var isAEAFLocked = false
+    /// 1 normally; below 1 when the simulated lens is wider than the phone can go,
+    /// meaning the picture should be drawn that much smaller inside a black frame.
+    private(set) var previewScale: CGFloat = 1
 
     /// Range the sun slider is allowed to move in.
     let biasLimit: Float = 3
@@ -27,6 +30,13 @@ final class CameraController {
     @ObservationIgnored private var pollTimer: Timer?
     @ObservationIgnored private let photoOutput = AVCapturePhotoOutput()
     @ObservationIgnored private var rotationCoordinator: AVCaptureDevice.RotationCoordinator?
+    /// Focal length (35mm equivalent) the viewfinder should show; nil = the phone's main camera as is.
+    @ObservationIgnored private var targetEquivalent: Double?
+    /// 35mm equivalent focal length of the phone's main camera (about 26mm on recent iPhones).
+    @ObservationIgnored private var wideEquivalent: Double = 26
+    /// Zoom factor of the main camera on the active device. Not 1 on virtual devices that
+    /// include an ultra wide camera, where 1 is the ultra wide.
+    @ObservationIgnored private var baseZoom: CGFloat = 1
     /// Delegates of in-flight captures, kept alive until each finishes. Accessed on `sessionQueue`.
     @ObservationIgnored private var captureDelegates: [Int64: PhotoCaptureDelegate] = [:]
 
@@ -79,12 +89,29 @@ final class CameraController {
     }
 
     private func configure() {
-        guard let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back),
+        // Prefer a multi-camera device so the ultra wide is available for wide lenses.
+        let discovery = AVCaptureDevice.DiscoverySession(
+            deviceTypes: [.builtInTripleCamera, .builtInDualWideCamera, .builtInDualCamera, .builtInWideAngleCamera],
+            mediaType: .video,
+            position: .back
+        )
+        guard let device = discovery.devices.first,
               let input = try? AVCaptureDeviceInput(device: device) else {
             status = .unavailable
             return
         }
         self.device = device
+        if let fov = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back)?.activeFormat.videoFieldOfView, fov > 0 {
+            // Horizontal field of view against the 36mm width of a full-frame sensor.
+            wideEquivalent = 18 / tan(Double(fov) * .pi / 360)
+        }
+        if device.constituentDevices.first?.deviceType == .builtInUltraWideCamera,
+           let switchOver = device.virtualDeviceSwitchOverVideoZoomFactors.first {
+            baseZoom = CGFloat(truncating: switchOver)
+        } else {
+            baseZoom = 1
+        }
+        applyZoom()
         rotationCoordinator = AVCaptureDevice.RotationCoordinator(device: device, previewLayer: nil)
 
         sessionQueue.async { [session, photoOutput] in
@@ -104,6 +131,51 @@ final class CameraController {
                 self.status = .running
                 self.startPolling()
             }
+        }
+    }
+
+    // MARK: - Lens simulation
+
+    /// Zooms the viewfinder to the field of view of a lens, given as a 35mm equivalent focal length.
+    /// Wider than the phone can go is shown as a smaller picture in a black frame.
+    func setEquivalentFocalLength(_ millimeters: Double?) {
+        guard millimeters != targetEquivalent else { return }
+        targetEquivalent = millimeters
+        applyZoom()
+    }
+
+    private func applyZoom() {
+        let wanted = CGFloat((targetEquivalent ?? wideEquivalent) / wideEquivalent) * baseZoom
+        let lower = device?.minAvailableVideoZoomFactor ?? 1
+        let upper = min(device?.maxAvailableVideoZoomFactor ?? 10 * baseZoom, 10 * baseZoom)
+        let zoom = min(max(wanted, lower), upper)
+        // Only the "too wide" case needs a border; "too long" just stays at maximum zoom.
+        let scale = min(wanted / zoom, 1)
+        if previewScale != scale { previewScale = scale }
+
+        guard let device else { return }
+        sessionQueue.async {
+            guard (try? device.lockForConfiguration()) != nil else { return }
+            device.videoZoomFactor = zoom
+            device.unlockForConfiguration()
+        }
+    }
+
+    /// Draws a photo smaller on black to match what the framed viewfinder showed.
+    private static func framed(_ image: UIImage, scale: CGFloat) -> UIImage {
+        guard scale < 1 else { return image }
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = image.scale
+        format.opaque = true
+        let size = image.size
+        let inner = CGRect(
+            x: size.width * (1 - scale) / 2, y: size.height * (1 - scale) / 2,
+            width: size.width * scale, height: size.height * scale
+        )
+        return UIGraphicsImageRenderer(size: size, format: format).image { context in
+            UIColor.black.setFill()
+            context.fill(CGRect(origin: .zero, size: size))
+            image.draw(in: inner)
         }
     }
 
@@ -128,12 +200,13 @@ final class CameraController {
     /// Takes a photo with the current (auto) exposure, upright for how the phone is held.
     @MainActor
     func capturePhoto() async throws -> UIImage {
+        let scale = previewScale
         guard status == .running else {
-            return PhotoStamper.placeholderPhoto()
+            return Self.framed(PhotoStamper.placeholderPhoto(), scale: scale)
         }
         let angle = rotationCoordinator?.videoRotationAngleForHorizonLevelCapture ?? 90
 
-        return try await withCheckedThrowingContinuation { continuation in
+        let photo = try await withCheckedThrowingContinuation { continuation in
             sessionQueue.async { [self] in
                 if let connection = photoOutput.connection(with: .video), connection.isVideoRotationAngleSupported(angle) {
                     connection.videoRotationAngle = angle
@@ -148,6 +221,7 @@ final class CameraController {
                 photoOutput.capturePhoto(with: settings, delegate: captureDelegates[id]!)
             }
         }
+        return Self.framed(photo, scale: scale)
     }
 
     // MARK: - Focus & exposure

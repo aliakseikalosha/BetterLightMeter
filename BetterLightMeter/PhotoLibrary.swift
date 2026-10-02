@@ -165,3 +165,62 @@ enum PhotoStamper {
         }
     }
 }
+
+/// The meter settings in effect when a photo was taken, written into its EXIF data.
+struct PhotoMetadata: Sendable {
+    var iso: Double
+    var shutterSeconds: Double
+    var fNumber: Double
+    var exposureBias: Double
+    var focalLength: Double?
+    var camera: String?
+    var lens: String?
+    var summary: String
+    var date: Date = .now
+
+    /// Reads the numbers back from a setting's scale label, e.g. "1/125", `2"`, "f/5.6".
+    static func value(of label: String, for setting: ExposureSetting) -> Double {
+        var text = label.replacingOccurrences(of: "\"", with: "").replacingOccurrences(of: "f/", with: "")
+        if setting == .shutter, text.hasPrefix("1/"), let denominator = Double(text.dropFirst(2)) {
+            return 1 / denominator
+        }
+        text = text.trimmingCharacters(in: .whitespaces)
+        return Double(text) ?? 0
+    }
+
+    /// Returns `jpeg` with EXIF/TIFF tags added, keeping pixels and existing metadata untouched.
+    func embedded(in jpeg: Data) -> Data {
+        guard let source = CGImageSourceCreateWithData(jpeg as CFData, nil),
+              let type = CGImageSourceGetType(source) else { return jpeg }
+
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy:MM:dd HH:mm:ss"
+        let stamp = formatter.string(from: date)
+
+        var exif: [CFString: Any] = [
+            kCGImagePropertyExifISOSpeedRatings: [Int(iso.rounded())],
+            kCGImagePropertyExifExposureTime: shutterSeconds,
+            kCGImagePropertyExifFNumber: fNumber,
+            kCGImagePropertyExifExposureBiasValue: exposureBias,
+            kCGImagePropertyExifDateTimeOriginal: stamp,
+            kCGImagePropertyExifDateTimeDigitized: stamp,
+            kCGImagePropertyExifUserComment: summary,
+        ]
+        if let focalLength { exif[kCGImagePropertyExifFocalLength] = focalLength }
+        if let lens { exif[kCGImagePropertyExifLensModel] = lens }
+
+        var tiff: [CFString: Any] = [kCGImagePropertyTIFFSoftware: "Better Light Meter"]
+        if let camera { tiff[kCGImagePropertyTIFFModel] = camera }
+
+        let properties: [CFString: Any] = [
+            kCGImagePropertyExifDictionary: exif,
+            kCGImagePropertyTIFFDictionary: tiff,
+        ]
+
+        let output = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(output, type, 1, nil) else { return jpeg }
+        CGImageDestinationAddImageFromSource(destination, source, 0, properties as CFDictionary)
+        return CGImageDestinationFinalize(destination) ? output as Data : jpeg
+    }
+}

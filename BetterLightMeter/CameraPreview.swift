@@ -6,6 +6,8 @@ import UIKit
 /// long press for AE/AF lock, vertical drag for exposure compensation.
 struct CameraPreview: UIViewRepresentable {
     let session: AVCaptureSession
+    /// Below 1 the picture is shrunk inside a black frame (the lens is wider than the phone's).
+    var contentScale: CGFloat = 1
     /// Point in view coordinates, point in device (0...1) coordinates.
     var onTap: (CGPoint, CGPoint) -> Void
     var onLongPress: (CGPoint, CGPoint) -> Void
@@ -21,6 +23,7 @@ struct CameraPreview: UIViewRepresentable {
         view.backgroundColor = .black
         view.previewLayer.session = session
         view.previewLayer.videoGravity = .resizeAspectFill
+        view.setContentScale(contentScale, animated: false)
 
         let coordinator = context.coordinator
         view.addGestureRecognizer(UITapGestureRecognizer(target: coordinator, action: #selector(Coordinator.handleTap)))
@@ -33,18 +36,55 @@ struct CameraPreview: UIViewRepresentable {
 
     func updateUIView(_ uiView: PreviewView, context: Context) {
         context.coordinator.parent = self
+        uiView.setContentScale(contentScale, animated: true)
     }
 
+    /// Gestures live on this view so they keep working in the black border;
+    /// the picture itself is in `layerView`, which gets scaled.
     final class PreviewView: UIView {
-        override class var layerClass: AnyClass { AVCaptureVideoPreviewLayer.self }
+        private final class LayerView: UIView {
+            override class var layerClass: AnyClass { AVCaptureVideoPreviewLayer.self }
+        }
+
+        private let layerView = LayerView()
+        private var scale: CGFloat = 1
 
         var previewLayer: AVCaptureVideoPreviewLayer {
             // swiftlint:disable:next force_cast
-            layer as! AVCaptureVideoPreviewLayer
+            layerView.layer as! AVCaptureVideoPreviewLayer
+        }
+
+        override init(frame: CGRect) {
+            super.init(frame: frame)
+            addSubview(layerView)
+        }
+
+        required init?(coder: NSCoder) {
+            fatalError("init(coder:) has not been implemented")
+        }
+
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            // Not `frame`: it is undefined while a transform is applied.
+            layerView.bounds = CGRect(origin: .zero, size: bounds.size)
+            layerView.center = CGPoint(x: bounds.midX, y: bounds.midY)
+        }
+
+        func setContentScale(_ newScale: CGFloat, animated: Bool) {
+            guard newScale != scale else { return }
+            scale = newScale
+            let apply = { self.layerView.transform = CGAffineTransform(scaleX: newScale, y: newScale) }
+            if animated {
+                UIView.animate(withDuration: 0.25, animations: apply)
+            } else {
+                apply()
+            }
         }
 
         func devicePoint(for viewPoint: CGPoint) -> CGPoint {
-            previewLayer.captureDevicePointConverted(fromLayerPoint: viewPoint)
+            let point = previewLayer.captureDevicePointConverted(fromLayerPoint: convert(viewPoint, to: layerView))
+            // Taps in the border land outside the picture.
+            return CGPoint(x: min(max(point.x, 0), 1), y: min(max(point.y, 0), 1))
         }
     }
 

@@ -12,6 +12,9 @@ struct CameraPreset: Codable, Hashable, Identifiable {
     var iso: PresetRange?
     /// Body shutter. Omit for bodies without one (e.g. Hasselblad V), whose lenses carry the shutter.
     var shutter: PresetRange?
+    /// Focal length multiplier relative to 35mm full frame (APS-C ≈ 1.5, 6x6 medium format ≈ 0.55).
+    /// Omit for 1.
+    var cropFactor: Double?
     var lenses: [LensPreset]
 
     var id: String { name }
@@ -19,6 +22,7 @@ struct CameraPreset: Codable, Hashable, Identifiable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         name = try container.decode(String.self, forKey: .name)
+        cropFactor = try container.decodeIfPresent(Double.self, forKey: .cropFactor)
         iso = try container.decodeIfPresent(PresetRange.self, forKey: .iso)
         shutter = try container.decodeIfPresent(PresetRange.self, forKey: .shutter)
         lenses = try container.decodeIfPresent([LensPreset].self, forKey: .lenses) ?? []
@@ -28,6 +32,8 @@ struct CameraPreset: Codable, Hashable, Identifiable {
 struct LensPreset: Codable, Hashable, Identifiable {
     var name: String
     var aperture: PresetRange?
+    /// Focal length in mm, used to simulate the field of view.
+    var focalLength: Double?
     /// Leaf shutter built into the lens. When present it replaces the body's shutter range.
     var shutter: PresetRange?
 

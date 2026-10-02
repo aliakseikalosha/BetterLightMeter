@@ -15,6 +15,7 @@ struct ContentView: View {
     @State private var isCapturing = false
     @State private var isShowingSettings = false
     @State private var toast: String?
+    @State private var lastPhoto: UIImage?
 
     @Environment(\.scenePhase) private var scenePhase
 
@@ -25,6 +26,11 @@ struct ContentView: View {
     private var selectedLens: LensPreset? { selectedCamera?.lenses.first { $0.name == settings.lensName } }
     private var limits: EffectiveLimits {
         EffectiveLimits(camera: selectedCamera, lens: selectedLens, settings: settings)
+    }
+
+    /// 35mm equivalent focal length to show in the viewfinder, if simulating the lens.
+    private var simulatedFocalLength: Double? {
+        settings.simulateLens ? limits.equivalentFocalLength : nil
     }
 
     var body: some View {
@@ -58,6 +64,9 @@ struct ContentView: View {
         }
         .onChange(of: camera.sceneEV100) { _, ev in
             if let ev { meter.updateScene(ev: ev) }
+        }
+        .onChange(of: simulatedFocalLength, initial: true) { _, millimeters in
+            camera.setEquivalentFocalLength(millimeters)
         }
         .onChange(of: limits.all, initial: true) { _, allowed in
             meter.setAllowed(allowed)
@@ -102,9 +111,7 @@ struct ContentView: View {
 
             Spacer()
 
-            if meter.isHeld {
-                badge("HOLD")
-            } else if camera.isAEAFLocked {
+            if camera.isAEAFLocked {
                 badge("AE/AF LOCK")
             } else {
                 badge("LIVE", color: .white.opacity(0.25), text: .white)
@@ -129,6 +136,7 @@ struct ContentView: View {
             ZStack {
                 CameraPreview(
                     session: camera.session,
+                    contentScale: camera.previewScale,
                     onTap: { point, devicePoint in
                         focusPoint = point
                         camera.focusAndExpose(at: devicePoint, lock: false)
@@ -145,6 +153,8 @@ struct ContentView: View {
                 )
 
                 placeholder
+                    .scaleEffect(camera.previewScale)
+                    .animation(.easeOut(duration: 0.25), value: camera.previewScale)
                     .allowsHitTesting(camera.status == .unauthorized)
 
                 if let focusPoint {
@@ -259,7 +269,16 @@ struct ContentView: View {
 
     /// What the phone camera itself chose, as reference.
     private var cameraReadout: some View {
-        Group {
+        VStack(spacing: 4) {
+            if let simulatedFocalLength {
+                Text("≈ \(Int(simulatedFocalLength.rounded())) mm (35mm equiv.)")
+                    .font(.system(size: 11, weight: .medium))
+                    .monospacedDigit()
+                    .foregroundStyle(.white.opacity(0.85))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(.black.opacity(0.4), in: Capsule())
+            }
             if camera.status == .running, camera.iso > 0 {
                 Text("ISO \(Int(camera.iso.rounded()))  ·  \(shutterText(camera.exposureDuration))  ·  f/\(String(format: "%.2g", camera.aperture))")
                     .font(.system(size: 11, weight: .medium))
@@ -274,6 +293,15 @@ struct ContentView: View {
 
     private var bottomBar: some View {
         HStack {
+            thumbnailButton
+                .frame(width: 48, height: 48)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            ShutterButton(isBusy: isCapturing) {
+                takePicture()
+            }
+            .sensoryFeedback(.impact(weight: .medium), trigger: isCapturing) { _, new in new }
+
             Button {
                 camera.resetMetering()
                 withAnimation { focusPoint = nil }
@@ -286,33 +314,33 @@ struct ContentView: View {
             .foregroundStyle(.white)
             .opacity(camera.bias != 0 || camera.isAEAFLocked || focusPoint != nil ? 1 : 0.35)
             .accessibilityLabel("Reset metering to center")
-
-            Spacer()
-
-            ShutterButton(isBusy: isCapturing) {
-                takePicture()
-            }
-            .sensoryFeedback(.impact(weight: .medium), trigger: isCapturing) { _, new in new }
-
-            Spacer()
-
-            Button {
-                meter.setHeld(!meter.isHeld, currentEV: camera.sceneEV100)
-            } label: {
-                Text("HOLD")
-                    .font(.system(size: 11, weight: .bold))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.6)
-                    .padding(.horizontal, 4)
-                    .foregroundStyle(meter.isHeld ? .black : .white)
-                    .frame(width: 48, height: 48)
-                    .background(meter.isHeld ? Color.yellow : .white.opacity(0.12), in: Circle())
-            }
-            .sensoryFeedback(.impact(weight: .light), trigger: meter.isHeld)
-            .accessibilityLabel(meter.isHeld ? Text("Release meter reading") : Text("Hold meter reading"))
+            .frame(maxWidth: .infinity, alignment: .trailing)
         }
         .padding(.horizontal, 32)
         .padding(.vertical, 12)
+    }
+
+    /// Preview of the last captured photo; opens the Photos app.
+    @ViewBuilder
+    private var thumbnailButton: some View {
+        if let lastPhoto {
+            Button {
+                if let url = URL(string: "photos-redirect://") { UIApplication.shared.open(url) }
+            } label: {
+                Image(uiImage: lastPhoto)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 48, height: 48)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(.white.opacity(0.6), lineWidth: 1))
+            }
+            .accessibilityLabel("Last photo")
+        } else {
+            RoundedRectangle(cornerRadius: 8)
+                .fill(.white.opacity(0.12))
+                .frame(width: 48, height: 48)
+                .accessibilityHidden(true)
+        }
     }
 
     // MARK: - Actions
@@ -364,6 +392,16 @@ struct ContentView: View {
         details += [selectedCamera?.name, selectedLens?.name].compactMap { $0 }
         details.append(Date.now.formatted(date: .abbreviated, time: .shortened))
         let detailsLine = details.joined(separator: "  ·  ")
+        let metadata = PhotoMetadata(
+            iso: PhotoMetadata.value(of: meter.label(of: .iso), for: .iso),
+            shutterSeconds: PhotoMetadata.value(of: meter.label(of: .shutter), for: .shutter),
+            fNumber: PhotoMetadata.value(of: meter.label(of: .aperture), for: .aperture),
+            exposureBias: meter.deviation,
+            focalLength: selectedLens?.focalLength,
+            camera: selectedCamera?.name,
+            lens: selectedLens?.name,
+            summary: "\(headline)  ·  \(detailsLine)"
+        )
         let albumID = settings.albumID
         let albumTitle = settings.albumTitle
         let photoLocation = settings.saveLocation ? location.currentLocation : nil
@@ -376,7 +414,11 @@ struct ContentView: View {
                     PhotoStamper.stamp(photo, headline: headline, details: detailsLine).jpegData(compressionQuality: 0.92)
                 }.value
                 guard let jpeg else { throw CocoaError(.fileWriteUnknown) }
-                try await PhotoLibrary.save(jpeg: jpeg, toAlbum: albumID, location: photoLocation)
+                try await PhotoLibrary.save(jpeg: metadata.embedded(in: jpeg), toAlbum: albumID, location: photoLocation)
+                let thumbnail = await Task.detached(priority: .utility) {
+                    UIImage(data: jpeg)?.preparingThumbnail(of: CGSize(width: 192, height: 192))
+                }.value
+                withAnimation { lastPhoto = thumbnail }
                 withAnimation { toast = String(localized: "Saved to \(albumTitle ?? String(localized: "Recents"))") }
             } catch {
                 withAnimation { toast = String(localized: "Couldn't save: \(error.localizedDescription)") }

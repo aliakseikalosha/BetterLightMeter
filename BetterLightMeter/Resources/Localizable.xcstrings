@@ -118,6 +118,38 @@
         }
       }
     },
+    "%lld mm" : {
+      "localizations" : {
+        "be" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld мм"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld mm"
+          }
+        }
+      }
+    },
+    "≈ %lld mm (35mm equiv.)" : {
+      "localizations" : {
+        "be" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "≈ %lld мм (экв. 35 мм)"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "≈ %lld mm (ekv. 35 mm)"
+          }
+        }
+      }
+    },
     "AE/AF LOCK" : {
       "localizations" : {
         "be" : {
@@ -454,6 +486,22 @@
         }
       }
     },
+    "Crop factor" : {
+      "localizations" : {
+        "be" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Кроп-фактар"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Crop faktor"
+          }
+        }
+      }
+    },
     "Done" : {
       "localizations" : {
         "be" : {
@@ -502,6 +550,22 @@
         }
       }
     },
+    "Focal length" : {
+      "localizations" : {
+        "be" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Фокусная адлегласьць"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ohnisková vzdálenost"
+          }
+        }
+      }
+    },
     "Highest" : {
       "localizations" : {
         "be" : {
@@ -519,6 +583,7 @@
       }
     },
     "HOLD" : {
+      "extractionState" : "stale",
       "localizations" : {
         "be" : {
           "stringUnit" : {
@@ -535,6 +600,7 @@
       }
     },
     "Hold meter reading" : {
+      "extractionState" : "stale",
       "localizations" : {
         "be" : {
           "stringUnit" : {
@@ -629,6 +695,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Jazyk"
+          }
+        }
+      }
+    },
+    "Last photo" : {
+      "localizations" : {
+        "be" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Апошняя фатаграфія"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Poslední fotka"
           }
         }
       }
@@ -1002,6 +1084,7 @@
       }
     },
     "Release meter reading" : {
+      "extractionState" : "stale",
       "localizations" : {
         "be" : {
           "stringUnit" : {
@@ -1221,6 +1304,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Čas závěrky"
+          }
+        }
+      }
+    },
+    "Simulate Lens View" : {
+      "localizations" : {
+        "be" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Сымуляваць поле зроку аб’ектыва"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Simulovat záběr objektivu"
           }
         }
       }
