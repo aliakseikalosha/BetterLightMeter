@@ -2,13 +2,17 @@ import SwiftUI
 
 /// Horizontally scrolling value picker that snaps to the centered value.
 /// Shows the scale entries listed in `ids`; `selected` and `onSelect` use scale indices.
+/// Double-tapping calls `onDoubleTap`.
 struct SettingWheel: View {
     let labels: [String]
     let ids: [Int]
     let selected: Int
     let accent: Color
     let isEnabled: Bool
+    /// Fades the unselected values, e.g. for a locked setting.
+    let isDimmed: Bool
     let onSelect: (Int) -> Void
+    let onDoubleTap: () -> Void
 
     @State private var scrollPosition: ScrollPosition
     /// True between the user touching the wheel and it coming to rest, so programmatic
@@ -18,13 +22,16 @@ struct SettingWheel: View {
 
     private let itemWidth: CGFloat = 76
 
-    init(labels: [String], ids: [Int], selected: Int, accent: Color, isEnabled: Bool, onSelect: @escaping (Int) -> Void) {
+    init(labels: [String], ids: [Int], selected: Int, accent: Color, isEnabled: Bool,
+         isDimmed: Bool, onSelect: @escaping (Int) -> Void, onDoubleTap: @escaping () -> Void) {
         self.labels = labels
         self.ids = ids
         self.selected = selected
         self.accent = accent
         self.isEnabled = isEnabled
+        self.isDimmed = isDimmed
         self.onSelect = onSelect
+        self.onDoubleTap = onDoubleTap
         _scrollPosition = State(initialValue: ScrollPosition(id: selected, anchor: .center))
     }
 
@@ -42,9 +49,11 @@ struct SettingWheel: View {
                         Text(labels[index])
                             .font(.system(size: isSelected ? 18 : 15, weight: isSelected ? .semibold : .regular, design: .rounded))
                             .monospacedDigit()
-                            .foregroundStyle(isSelected ? accent : .white.opacity(isEnabled ? 0.45 : 0.2))
+                            .foregroundStyle(isSelected ? accent : .white.opacity(isEnabled && !isDimmed ? 0.45 : 0.2))
                             .frame(width: itemWidth, height: geo.size.height)
                             .contentShape(Rectangle())
+                            // Declared first so a double tap doesn't also select the tapped value.
+                            .onTapGesture(count: 2) { onDoubleTap() }
                             .onTapGesture { if isEnabled { userSelect(index) } }
                     }
                 }

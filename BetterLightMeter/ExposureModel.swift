@@ -114,6 +114,8 @@ extension ExposureSetting {
 ///
 /// Up to two settings can be locked; a locked setting keeps its value. When the scene or a
 /// setting changes, one unlocked setting compensates: the one the user touched least recently.
+/// Every setting can still be changed by hand. Changing the only unlocked one switches it to
+/// manual, so nothing compensates until it's reset to automatic.
 /// Each setting can only take the values in `allowed` (user limits and camera/lens presets).
 @Observable
 final class ExposureModel {
@@ -131,6 +133,8 @@ final class ExposureModel {
 
     /// Settings the user changed, most recent last.
     private var touchOrder: [ExposureSetting] = []
+    /// The only unlocked setting, after the user set it by hand instead of letting it compensate.
+    private var manualOverride: ExposureSetting?
 
     init() {
         compensate()
@@ -149,21 +153,21 @@ final class ExposureModel {
         allowedIndices(for: setting).count == 1
     }
 
-    /// The setting that is currently adjusted automatically to keep the exposure correct.
-    var adjusting: ExposureSetting {
-        // Never-touched settings go first, preferring shutter, then aperture, then ISO.
-        let preference: [ExposureSetting] = [.shutter, .aperture, .iso]
-        let unlocked = preference.filter { !isLocked($0) }
-        let movable = unlocked.filter { !isFixed($0) }
-        let candidates = movable.isEmpty ? unlocked : movable
-        return candidates.min { recency(of: $0) < recency(of: $1) } ?? .shutter
+    /// The setting that is currently adjusted automatically to keep the exposure correct,
+    /// or nil while the user has set the only unlocked one by hand.
+    var adjusting: ExposureSetting? {
+        let candidate = autoCandidate
+        return candidate == manualOverride ? nil : candidate
     }
 
-    /// Whether the user can scroll this setting: locked values are fixed, and the auto value
-    /// can't be scrolled when it's the only free one (it would just snap back).
+    /// Whether the user can scroll this setting. Only single-value settings can't change.
     func isEditable(_ setting: ExposureSetting) -> Bool {
-        let freeCount = ExposureSetting.allCases.filter { !isLocked($0) && !isFixed($0) }.count
-        return !isLocked(setting) && !isFixed(setting) && !(setting == adjusting && freeCount <= 1)
+        !isFixed(setting)
+    }
+
+    /// Whether `resetToAuto` would do anything for this setting.
+    func canResetToAuto(_ setting: ExposureSetting) -> Bool {
+        !isLocked(setting) && !isFixed(setting) && adjusting != setting
     }
 
     func index(of setting: ExposureSetting) -> Int {
@@ -190,6 +194,21 @@ final class ExposureModel {
         indices[setting] = index
         touchOrder.removeAll { $0 == setting }
         touchOrder.append(setting)
+        // Still the auto candidate after being touched last: it's the only unlocked one.
+        if autoCandidate == setting {
+            manualOverride = setting
+        }
+        compensate()
+    }
+
+    /// Makes an unlocked setting the automatically adjusted one again.
+    func resetToAuto(_ setting: ExposureSetting) {
+        guard !isLocked(setting), !isFixed(setting) else { return }
+        manualOverride = nil
+        // Count every other setting as touched more recently, so this one compensates.
+        touchOrder.removeAll { $0 == setting }
+        let untouched = ExposureSetting.allCases.filter { $0 != setting && !touchOrder.contains($0) }
+        touchOrder = [setting] + untouched + touchOrder
         compensate()
     }
 
@@ -203,6 +222,7 @@ final class ExposureModel {
             }
             locks.append(setting)
         }
+        manualOverride = nil
         compensate()
     }
 
@@ -230,6 +250,16 @@ final class ExposureModel {
         }
     }
 
+    /// Least recently touched unlocked setting. Never-touched settings go first,
+    /// preferring shutter, then aperture, then ISO.
+    private var autoCandidate: ExposureSetting {
+        let preference: [ExposureSetting] = [.shutter, .aperture, .iso]
+        let unlocked = preference.filter { !isLocked($0) }
+        let movable = unlocked.filter { !isFixed($0) }
+        let candidates = movable.isEmpty ? unlocked : movable
+        return candidates.min { recency(of: $0) < recency(of: $1) } ?? .shutter
+    }
+
     private func recency(of setting: ExposureSetting) -> Int {
         touchOrder.firstIndex(of: setting) ?? -1
     }
@@ -246,7 +276,7 @@ final class ExposureModel {
     }
 
     private func compensate() {
-        let target = adjusting
+        guard let target = adjusting else { return }
         let others = ExposureSetting.allCases
             .filter { $0 != target }
             .reduce(0) { $0 + $1.evSign * stops(of: $1) }

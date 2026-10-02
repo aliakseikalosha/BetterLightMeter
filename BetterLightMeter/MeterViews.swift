@@ -97,9 +97,12 @@ struct SettingRow: View {
     let setting: ExposureSetting
     let meter: ExposureModel
 
+    @State private var resetTicks = 0
+
     var body: some View {
         let isLocked = meter.isLocked(setting)
         let isAuto = meter.adjusting == setting
+        let isManual = meter.adjusting == nil && !isLocked
 
         HStack(spacing: 4) {
             Button {
@@ -110,7 +113,7 @@ struct SettingRow: View {
                         .font(.system(size: 15, weight: .semibold))
                     Text(setting.title)
                         .font(.system(size: 9, weight: .bold))
-                    Text(meter.isFixed(setting) ? "FIXED" : isLocked ? "LOCKED" : isAuto ? "AUTO" : " ")
+                    Text(meter.isFixed(setting) ? "FIXED" : isLocked ? "LOCKED" : isAuto ? "AUTO" : isManual ? "MANUAL" : " ")
                         .font(.system(size: 8, weight: .semibold))
                         .opacity(0.8)
                 }
@@ -127,7 +130,14 @@ struct SettingRow: View {
                 selected: meter.index(of: setting),
                 accent: isAuto ? .yellow : .white,
                 isEnabled: meter.isEditable(setting),
-                onSelect: { meter.select($0, for: setting) }
+                isDimmed: isLocked,
+                onSelect: { meter.select($0, for: setting) },
+                onDoubleTap: {
+                    if meter.canResetToAuto(setting) {
+                        meter.resetToAuto(setting)
+                        resetTicks += 1
+                    }
+                }
             )
         }
         .frame(height: 50)
@@ -135,6 +145,7 @@ struct SettingRow: View {
             RoundedRectangle(cornerRadius: 12)
                 .fill(.white.opacity(isLocked ? 0.1 : 0.05))
         )
+        .sensoryFeedback(.impact(weight: .medium), trigger: resetTicks)
     }
 }
 
