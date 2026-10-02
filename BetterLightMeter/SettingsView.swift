@@ -13,6 +13,7 @@ struct SettingsView: View {
     @State private var newAlbumName = ""
     @State private var isImporting = false
     @State private var isConfirmingReset = false
+    @State private var copiedFormat = false
     @State private var message: (title: String, body: String)?
 
     private var camera: CameraPreset? { presets.camera(named: settings.cameraName) }
@@ -188,9 +189,16 @@ struct SettingsView: View {
             Button("Import Presets from JSON…") { isImporting = true }
             Button("Reset to Built-in Presets", role: .destructive) { isConfirmingReset = true }
             DisclosureGroup("JSON Format") {
-                Text(Self.formatExample)
-                    .font(.system(size: 11, design: .monospaced))
-                    .textSelection(.enabled)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(Self.formatExample)
+                        .font(.system(size: 11, design: .monospaced))
+                    Label(copiedFormat ? "Copied" : "Tap to copy", systemImage: copiedFormat ? "checkmark" : "doc.on.doc")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                .contentShape(Rectangle())
+                .onTapGesture { copyFormatExample() }
+                .sensoryFeedback(.success, trigger: copiedFormat) { _, copied in copied }
             }
         } header: {
             Text("Presets")
@@ -222,6 +230,15 @@ struct SettingsView: View {
             settings.albumTitle = album.title
         } catch {
             message = ("Couldn't Create Album", error.localizedDescription)
+        }
+    }
+
+    private func copyFormatExample() {
+        UIPasteboard.general.string = Self.formatExample
+        copiedFormat = true
+        Task {
+            try? await Task.sleep(for: .seconds(2))
+            copiedFormat = false
         }
     }
 
