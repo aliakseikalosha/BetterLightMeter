@@ -11,7 +11,7 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
-		B1E000000000000000000005 /* BetterLightMeter */ = {
+		8A74B8EA306FEC6800419FB0 /* BetterLightMeter */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = BetterLightMeter;
 			sourceTree = "<group>";
@@ -32,7 +32,7 @@
 		B1E000000000000000000002 = {
 			isa = PBXGroup;
 			children = (
-				B1E000000000000000000005 /* BetterLightMeter */,
+				8A74B8EA306FEC6800419FB0 /* BetterLightMeter */,
 				B1E000000000000000000003 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -61,7 +61,7 @@
 			dependencies = (
 			);
 			fileSystemSynchronizedGroups = (
-				B1E000000000000000000005 /* BetterLightMeter */,
+				8A74B8EA306FEC6800419FB0 /* BetterLightMeter */,
 			);
 			name = BetterLightMeter;
 			packageProductDependencies = (
@@ -91,6 +91,8 @@
 			knownRegions = (
 				en,
 				Base,
+				cs,
+				be,
 			);
 			mainGroup = B1E000000000000000000002;
 			minimizedProjectReferenceProxies = 1;
@@ -143,6 +145,7 @@
 					"$(inherited)",
 				);
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
@@ -164,6 +167,7 @@
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
 				IPHONEOS_DEPLOYMENT_TARGET = 18.0;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				SDKROOT = iphoneos;
 				SWIFT_COMPILATION_MODE = wholemodule;
@@ -183,6 +187,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Light Meter";
 				INFOPLIST_KEY_NSCameraUsageDescription = "The camera is used to meter the light of the scene.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Your location is saved with each picture you take.";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Pictures you take are saved with the meter settings printed on them.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Access to your albums lets you choose where pictures are saved.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
@@ -214,6 +219,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Light Meter";
 				INFOPLIST_KEY_NSCameraUsageDescription = "The camera is used to meter the light of the scene.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Your location is saved with each picture you take.";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "Pictures you take are saved with the meter settings printed on them.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "Access to your albums lets you choose where pictures are saved.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;

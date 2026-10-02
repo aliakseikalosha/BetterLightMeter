@@ -1,3 +1,4 @@
+import CoreLocation
 import Photos
 import UIKit
 
@@ -10,7 +11,7 @@ enum PhotoLibraryError: LocalizedError {
     case accessDenied
 
     var errorDescription: String? {
-        "Allow access to Photos in Settings to save pictures."
+        String(localized: "Allow access to Photos in Settings to save pictures.")
     }
 }
 
@@ -27,7 +28,7 @@ enum PhotoLibrary {
         var albums: [PhotoAlbum] = []
         result.enumerateObjects { collection, _, _ in
             if collection.canPerform(.addContent) {
-                albums.append(PhotoAlbum(id: collection.localIdentifier, title: collection.localizedTitle ?? "Untitled"))
+                albums.append(PhotoAlbum(id: collection.localIdentifier, title: collection.localizedTitle ?? String(localized: "Untitled")))
             }
         }
         return albums.sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
@@ -44,7 +45,7 @@ enum PhotoLibrary {
     }
 
     /// Saves JPEG data to the library and, if given and still present, to an album.
-    static func save(jpeg data: Data, toAlbum albumID: String?) async throws {
+    static func save(jpeg data: Data, toAlbum albumID: String?, location: CLLocation? = nil) async throws {
         guard await requestAccess() else { throw PhotoLibraryError.accessDenied }
         let album = albumID.flatMap {
             PHAssetCollection.fetchAssetCollections(withLocalIdentifiers: [$0], options: nil).firstObject
@@ -52,6 +53,7 @@ enum PhotoLibrary {
         try await PHPhotoLibrary.shared().performChanges {
             let request = PHAssetCreationRequest.forAsset()
             request.addResource(with: .photo, data: data, options: nil)
+            request.location = location
             if let album,
                let placeholder = request.placeholderForCreatedAsset,
                let albumRequest = PHAssetCollectionChangeRequest(for: album) {
@@ -63,6 +65,43 @@ enum PhotoLibrary {
     private final class IdentifierBox: @unchecked Sendable {
         var value = ""
     }
+}
+
+/// Tracks the device location so photos can be geotagged.
+@MainActor
+final class LocationProvider: NSObject, CLLocationManagerDelegate {
+    private let manager = CLLocationManager()
+
+    override init() {
+        super.init()
+        manager.delegate = self
+        manager.desiredAccuracy = kCLLocationAccuracyNearestTenMeters
+    }
+
+    /// Asks for permission if needed and starts updating; call when the camera appears.
+    func start() {
+        switch manager.authorizationStatus {
+        case .notDetermined: manager.requestWhenInUseAuthorization()
+        case .authorizedWhenInUse, .authorizedAlways: manager.startUpdatingLocation()
+        default: break
+        }
+    }
+
+    func stop() { manager.stopUpdatingLocation() }
+
+    /// The latest fix, if recent enough to describe where a photo was taken.
+    var currentLocation: CLLocation? {
+        guard let location = manager.location, abs(location.timestamp.timeIntervalSinceNow) < 120 else { return nil }
+        return location
+    }
+
+    nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        if manager.authorizationStatus == .authorizedWhenInUse || manager.authorizationStatus == .authorizedAlways {
+            manager.startUpdatingLocation()
+        }
+    }
+
+    nonisolated func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {}
 }
 
 /// Draws the exposure settings onto a photo, like a date stamp.

@@ -86,9 +86,9 @@ struct ExposureScale: View {
     }
 
     private var deviationText: String {
-        if abs(deviation) < 0.05 { return "Correct exposure" }
+        if abs(deviation) < 0.05 { return String(localized: "Correct exposure") }
         let amount = String(format: "%.1f EV", abs(deviation))
-        return deviation > 0 ? "Overexposed by \(amount)" : "Underexposed by \(amount)"
+        return deviation > 0 ? String(localized: "Overexposed by \(amount)") : String(localized: "Underexposed by \(amount)")
     }
 }
 
@@ -113,7 +113,13 @@ struct SettingRow: View {
                         .font(.system(size: 15, weight: .semibold))
                     Text(setting.title)
                         .font(.system(size: 9, weight: .bold))
-                    Text(meter.isFixed(setting) ? "FIXED" : isLocked ? "LOCKED" : isAuto ? "AUTO" : isManual ? "MANUAL" : " ")
+                    Group {
+                        if meter.isFixed(setting) { Text("FIXED") }
+                        else if isLocked { Text("LOCKED") }
+                        else if isAuto { Text("AUTO") }
+                        else if isManual { Text("MANUAL") }
+                        else { Text(verbatim: " ") }
+                    }
                         .font(.system(size: 8, weight: .semibold))
                         .opacity(0.8)
                 }

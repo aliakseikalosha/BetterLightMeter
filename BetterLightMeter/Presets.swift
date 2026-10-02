@@ -86,13 +86,13 @@ struct PresetRange: Codable, Hashable {
     private static func decodeValue(_ container: SingleValueDecodingContainer) throws -> Double {
         if let number = try? container.decode(Double.self) {
             guard number > 0 else {
-                throw DecodingError.dataCorruptedError(in: container, debugDescription: "Values must be greater than zero")
+                throw DecodingError.dataCorruptedError(in: container, debugDescription: String(localized: "Values must be greater than zero"))
             }
             return number
         }
         let text = try container.decode(String.self)
         guard let value = parse(text) else {
-            throw DecodingError.dataCorruptedError(in: container, debugDescription: "Can't read value \"\(text)\"")
+            throw DecodingError.dataCorruptedError(in: container, debugDescription: String(localized: "Can't read value \"\(text)\""))
         }
         return value
     }
@@ -143,7 +143,7 @@ final class PresetStore {
     func importPresets(from data: Data) throws -> Int {
         let file = try JSONDecoder().decode(PresetFile.self, from: data)
         guard !file.cameras.isEmpty else {
-            throw CocoaError(.fileReadCorruptFile, userInfo: [NSLocalizedDescriptionKey: "The file contains no cameras."])
+            throw CocoaError(.fileReadCorruptFile, userInfo: [NSLocalizedDescriptionKey: String(localized: "The file contains no cameras.")])
         }
         var merged = cameras
         for camera in file.cameras {
@@ -188,9 +188,9 @@ func describe(_ error: Error) -> String {
     }
     switch error {
     case .keyNotFound(let key, let context):
-        return "Missing \"\(key.stringValue)\" at \(path(context))"
+        return String(localized: "Missing \"\(key.stringValue)\" at \(path(context))")
     case .typeMismatch(_, let context), .valueNotFound(_, let context), .dataCorrupted(let context):
-        return "\(context.debugDescription) at \(path(context))"
+        return String(localized: "\(context.debugDescription) at \(path(context))")
     @unknown default:
         return error.localizedDescription
     }

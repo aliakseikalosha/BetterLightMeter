@@ -27,6 +27,7 @@ struct SettingsView: View {
                 limitsSection
                 saveSection
                 presetsSection
+                languageSection
             }
             .navigationTitle("Settings")
             .navigationBarTitleDisplayMode(.inline)
@@ -143,7 +144,8 @@ struct SettingsView: View {
             }
 
             if limits.userLimitConflicts(for: setting) {
-                Label("Outside the \(lens != nil && setting != .iso ? "lens" : "camera") range, so it is ignored.", systemImage: "exclamationmark.triangle.fill")
+                Label(lens != nil && setting != .iso ? "Outside the lens range, so it is ignored." : "Outside the camera range, so it is ignored.",
+                      systemImage: "exclamationmark.triangle.fill")
                     .font(.caption)
                     .foregroundStyle(.orange)
             }
@@ -165,14 +167,16 @@ struct SettingsView: View {
                 }
                 // Keep a remembered album selectable even before the list has loaded.
                 if let id = settings.albumID, !albums.contains(where: { $0.id == id }) {
-                    Text(settings.albumTitle ?? "Album").tag(Optional(id))
+                    Text(settings.albumTitle ?? String(localized: "Album")).tag(Optional(id))
                 }
             }
 
             Button("New Album…") {
-                newAlbumName = "Light Meter"
+                newAlbumName = String(localized: "Light Meter")
                 isNamingAlbum = true
             }
+
+            Toggle("Save Location", isOn: $settings.saveLocation)
         } header: {
             Text("Photos")
         } footer: {
@@ -180,6 +184,8 @@ struct SettingsView: View {
                 Text("Allow full access to Photos in the Settings app to choose an album.")
             } else {
                 Text("The shutter button takes a picture with the meter settings printed on it.")
+                    + Text(" ")
+                    + Text("Save Location tags pictures with where they were taken, if you allow location access.")
             }
         }
     }
@@ -207,6 +213,34 @@ struct SettingsView: View {
         }
     }
 
+    private var languageSection: some View {
+        Section {
+            Button {
+                if let url = URL(string: UIApplication.openSettingsURLString) {
+                    UIApplication.shared.open(url)
+                }
+            } label: {
+                HStack {
+                    Text("Language")
+                    Spacer()
+                    Text(Self.currentLanguageName)
+                        .foregroundStyle(.secondary)
+                    Image(systemName: "arrow.up.forward.app")
+                        .foregroundStyle(.secondary)
+                }
+            }
+        } footer: {
+            Text("The app uses your iPhone's language if it's supported, otherwise English. To change it, choose Language on the app's page in the Settings app.")
+        }
+    }
+
+    /// Name of the language the app is shown in, written in that language.
+    private static var currentLanguageName: String {
+        let code = Bundle.main.preferredLocalizations.first ?? "en"
+        let locale = Locale(identifier: code)
+        return locale.localizedString(forLanguageCode: code)?.capitalized(with: locale) ?? code
+    }
+
     // MARK: - Actions
 
     private func loadAlbums() async {
@@ -229,7 +263,7 @@ struct SettingsView: View {
             settings.albumID = album.id
             settings.albumTitle = album.title
         } catch {
-            message = ("Couldn't Create Album", error.localizedDescription)
+            message = (String(localized: "Couldn't Create Album"), error.localizedDescription)
         }
     }
 
@@ -248,9 +282,9 @@ struct SettingsView: View {
             let accessing = url.startAccessingSecurityScopedResource()
             defer { if accessing { url.stopAccessingSecurityScopedResource() } }
             let count = try presets.importPresets(from: Data(contentsOf: url))
-            message = ("Presets Imported", "\(count) camera\(count == 1 ? "" : "s") imported.")
+            message = (String(localized: "Presets Imported"), String(localized: "\(count) cameras imported."))
         } catch {
-            message = ("Couldn't Import Presets", describe(error))
+            message = (String(localized: "Couldn't Import Presets"), describe(error))
         }
     }
 

@@ -4,6 +4,7 @@ struct ContentView: View {
     @State private var camera = CameraController()
     @State private var meter = ExposureModel()
     @State private var settings = AppSettings()
+    @State private var location = LocationProvider()
     @State private var presets = PresetStore()
 
     @State private var focusPoint: CGPoint?
@@ -44,7 +45,10 @@ struct ContentView: View {
         }
         .background(Color.black.ignoresSafeArea())
         .preferredColorScheme(.dark)
-        .onAppear { camera.start() }
+        .onAppear { camera.start(); if settings.saveLocation { location.start() } }
+        .onChange(of: settings.saveLocation) { _, isOn in
+            if isOn { location.start() } else { location.stop() }
+        }
         .onChange(of: scenePhase) { _, phase in
             switch phase {
             case .active: camera.start()
@@ -297,12 +301,15 @@ struct ContentView: View {
             } label: {
                 Text("HOLD")
                     .font(.system(size: 11, weight: .bold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                    .padding(.horizontal, 4)
                     .foregroundStyle(meter.isHeld ? .black : .white)
                     .frame(width: 48, height: 48)
                     .background(meter.isHeld ? Color.yellow : .white.opacity(0.12), in: Circle())
             }
             .sensoryFeedback(.impact(weight: .light), trigger: meter.isHeld)
-            .accessibilityLabel(meter.isHeld ? "Release meter reading" : "Hold meter reading")
+            .accessibilityLabel(meter.isHeld ? Text("Release meter reading") : Text("Hold meter reading"))
         }
         .padding(.horizontal, 32)
         .padding(.vertical, 12)
@@ -310,7 +317,7 @@ struct ContentView: View {
 
     // MARK: - Actions
 
-    private func badge(_ text: String, color: Color = .yellow, text textColor: Color = .black) -> some View {
+    private func badge(_ text: LocalizedStringKey, color: Color = .yellow, text textColor: Color = .black) -> some View {
         Text(text)
             .font(.system(size: 11, weight: .bold))
             .foregroundStyle(textColor)
@@ -359,6 +366,7 @@ struct ContentView: View {
         let detailsLine = details.joined(separator: "  ·  ")
         let albumID = settings.albumID
         let albumTitle = settings.albumTitle
+        let photoLocation = settings.saveLocation ? location.currentLocation : nil
 
         Task {
             defer { isCapturing = false }
@@ -368,10 +376,10 @@ struct ContentView: View {
                     PhotoStamper.stamp(photo, headline: headline, details: detailsLine).jpegData(compressionQuality: 0.92)
                 }.value
                 guard let jpeg else { throw CocoaError(.fileWriteUnknown) }
-                try await PhotoLibrary.save(jpeg: jpeg, toAlbum: albumID)
-                withAnimation { toast = "Saved to \(albumTitle ?? "Recents")" }
+                try await PhotoLibrary.save(jpeg: jpeg, toAlbum: albumID, location: photoLocation)
+                withAnimation { toast = String(localized: "Saved to \(albumTitle ?? String(localized: "Recents"))") }
             } catch {
-                withAnimation { toast = "Couldn't save: \(error.localizedDescription)" }
+                withAnimation { toast = String(localized: "Couldn't save: \(error.localizedDescription)") }
             }
         }
     }

@@ -30,17 +30,17 @@ enum ExposureSetting: CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .iso: "ISO"
-        case .shutter: "SHUTTER"
-        case .aperture: "APERTURE"
+        case .iso: String(localized: "ISO")
+        case .shutter: String(localized: "SHUTTER")
+        case .aperture: String(localized: "APERTURE")
         }
     }
 
     var displayName: String {
         switch self {
-        case .iso: "ISO"
-        case .shutter: "Shutter Speed"
-        case .aperture: "Aperture"
+        case .iso: String(localized: "ISO")
+        case .shutter: String(localized: "Shutter Speed")
+        case .aperture: String(localized: "Aperture")
         }
     }
 
@@ -103,9 +103,9 @@ extension ExposureSetting {
     /// Names for the low / high end of the scale, in scale order.
     var limitTitles: (low: String, high: String) {
         switch self {
-        case .iso: ("Lowest", "Highest")
-        case .shutter: ("Slowest", "Fastest")
-        case .aperture: ("Widest", "Narrowest")
+        case .iso: (String(localized: "Lowest"), String(localized: "Highest"))
+        case .shutter: (String(localized: "Slowest"), String(localized: "Fastest"))
+        case .aperture: (String(localized: "Widest"), String(localized: "Narrowest"))
         }
     }
 }

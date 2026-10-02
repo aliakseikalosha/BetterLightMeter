@@ -30,7 +30,13 @@ final class AppSettings {
         didSet { defaults.set(albumTitle, forKey: "albumTitle") }
     }
 
+    /// Whether photos are geotagged (needs location permission too).
+    var saveLocation: Bool {
+        didSet { defaults.set(saveLocation, forKey: "saveLocation") }
+    }
+
     init() {
+        saveLocation = defaults.object(forKey: "saveLocation") as? Bool ?? true
         // nil = never chosen (use the default), "" = the user picked "None".
         if let storedCamera = defaults.string(forKey: "cameraName") {
             cameraName = storedCamera.isEmpty ? nil : storedCamera
@@ -124,7 +130,7 @@ struct EffectiveLimits {
         let labels = setting.scale.labels
         var text = first == last ? labels[first] : "\(labels[first]) – \(labels[last])"
         if presetRange(for: setting)?.fullStops == true {
-            text += ", full stops"
+            text += String(localized: ", full stops")
         }
         return text
     }

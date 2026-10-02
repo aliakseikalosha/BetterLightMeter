@@ -216,7 +216,7 @@ private final class PhotoCaptureDelegate: NSObject, AVCapturePhotoCaptureDelegat
     enum CaptureError: LocalizedError {
         case noImage
 
-        var errorDescription: String? { "The camera didn't return an image." }
+        var errorDescription: String? { String(localized: "The camera didn't return an image.") }
     }
 
     private var completion: ((Result<UIImage, Error>) -> Void)?
