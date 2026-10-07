@@ -26,7 +26,8 @@ final class CameraController {
 
     @ObservationIgnored let session = AVCaptureSession()
     @ObservationIgnored private let sessionQueue = DispatchQueue(label: "BetterLightMeter.camera")
-    @ObservationIgnored private var device: AVCaptureDevice?
+    /// The active camera; the viewfinder needs it to keep the preview upright when the phone is rotated.
+    private(set) var device: AVCaptureDevice?
     @ObservationIgnored private var pollTimer: Timer?
     @ObservationIgnored private let photoOutput = AVCapturePhotoOutput()
     @ObservationIgnored private var rotationCoordinator: AVCaptureDevice.RotationCoordinator?
@@ -197,7 +198,8 @@ final class CameraController {
 
     // MARK: - Photo
 
-    /// Takes a photo with the current (auto) exposure, upright for how the phone is held.
+    /// Takes a photo with the current (auto) exposure, upright for how the phone is held
+    /// (which matches the viewfinder, since the interface follows the phone).
     @MainActor
     func capturePhoto() async throws -> UIImage {
         let scale = previewScale

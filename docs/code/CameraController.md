@@ -15,6 +15,7 @@ Runs the back camera in auto exposure and publishes what the camera picked. That
 | `bias` | Exposure compensation in EV (clamped to ±3 and the device limits). |
 | `isAEAFLocked` | Exposure and focus are locked. |
 | `previewScale` | Below 1 when the simulated lens is wider than the phone can go. |
+| `device` | The active `AVCaptureDevice`, handed to [`CameraPreview`](CameraPreview.md) so it can keep the preview upright in landscape. |
 
 `session` (`AVCaptureSession`) is exposed for [`CameraPreview`](CameraPreview.md). All session and device configuration runs on a private serial `sessionQueue`.
 
@@ -77,7 +78,7 @@ camera.resetMetering()   // centre point, continuous AE, bias 0
 let image = try await camera.capturePhoto()
 ```
 
-`capturePhoto()` sets the connection rotation from `RotationCoordinator`, takes a JPEG with `.balanced` prioritisation, and applies `framed`. In `.unavailable` mode it returns `PhotoStamper.placeholderPhoto()`.
+`capturePhoto()` sets the connection rotation from `RotationCoordinator` (`videoRotationAngleForHorizonLevelCapture`, which follows how the phone is physically held, so the photo comes out in the same orientation as the viewfinder), takes a JPEG with `.balanced` prioritisation, and applies `framed`. In `.unavailable` mode it returns `PhotoStamper.placeholderPhoto()`.
 
 `PhotoCaptureDelegate` bridges the delegate callbacks to a continuation. It is stored in `captureDelegates` (keyed by `uniqueID`) until the capture finishes and resumes the continuation exactly once.
 

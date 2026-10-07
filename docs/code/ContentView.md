@@ -39,13 +39,27 @@ The main screen. It creates the models, wires them together and lays out the UI.
 
 Lifecycle: the camera starts on appear and when the scene becomes active, and stops in the background. Location updates follow the `saveLocation` setting.
 
-## Layout (top to bottom)
+## Orientation
+
+The app supports portrait and both landscapes. `isLandscape` is `verticalSizeClass == .compact`, which on iPhone is exactly "held sideways".
+
+`body` is a single view tree for both orientations: `MeterLayout` (a private `Layout` at the bottom of the file) takes three children in order, `topBar`, `viewfinder` and `controls`, and only decides where to put them.
+
+- **Portrait**: stacked top to bottom, `controls` at its natural height under the viewfinder.
+- **Landscape**: the `viewfinder` on the left; on the right a 320 pt column (`landscapeControlsWidth`) with `topBar` above `controls`. `controls` contains a `Spacer` that pushes the shutter row to the bottom of the column and takes no height in portrait. `topBar` and `bottomBar` are a little shorter so the column fits the iPhone SE's 375 pt height.
+
+Keep it one tree. An earlier version switched between two `if` branches, which destroyed and rebuilt the camera preview (a new preview layer and rotation coordinator on the running session) and all three wheels on every rotation, with main-thread stalls of 100–200 ms even in the Simulator. With `MeterLayout`, rotating only re-lays-out the existing views.
+
+`focusPoint` is in viewfinder coordinates, which mean something else after rotating, so rotating clears it.
+
+## Sections
 
 1. **`topBar`**: scene EV, the compensation value when non-zero, an `AE/AF LOCK` or `LIVE` badge, and the settings button.
 2. **`viewfinder`**: a `ZStack` of the [`CameraPreview`](CameraPreview.md), a placeholder (camera unavailable, or a permission prompt with *Open Settings*), the [`FocusIndicator`](MeterViews.md), the camera readout (ISO, shutter and aperture the phone chose, and the simulated focal length), the gear/lens menu, a toast, and the white capture flash.
-3. [`ExposureScale`](MeterViews.md) showing the deviation.
-4. Three [`SettingRow`](MeterViews.md)s.
-5. **`bottomBar`**: last-photo thumbnail (opens Photos), [`ShutterButton`](MeterViews.md), and a reset-metering button.
+3. **`controls`**, which holds the next three:
+   - [`ExposureScale`](MeterViews.md) showing the deviation.
+   - Three [`SettingRow`](MeterViews.md)s (`settingRows`).
+   - **`bottomBar`**: last-photo thumbnail (opens Photos), [`ShutterButton`](MeterViews.md), and a reset-metering button.
 
 ## Interactions
 

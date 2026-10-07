@@ -67,8 +67,10 @@ struct ExposureScale: View {
                     }
                 }
 
-                let clamped = min(max(deviation, -range), range)
-                let needleX = x(clamped)
+                // The needle always sticks to the closest mark (one every 1/3 EV); the text below
+                // gives the exact amount.
+                let nearestMark = Double((deviation * 3).rounded()) / 3
+                let needleX = x(min(max(nearestMark, -range), range))
                 var needle = Path()
                 needle.move(to: CGPoint(x: needleX - 5, y: size.height + 1))
                 needle.addLine(to: CGPoint(x: needleX + 5, y: size.height + 1))

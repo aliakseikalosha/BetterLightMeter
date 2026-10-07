@@ -23,7 +23,7 @@ struct StopScale {
     }
 }
 
-enum ExposureSetting: CaseIterable, Identifiable {
+enum ExposureSetting: String, Codable, CaseIterable, Identifiable {
     case iso, shutter, aperture
 
     var id: Self { self }
@@ -110,6 +110,19 @@ extension ExposureSetting {
     }
 }
 
+/// What the model remembers between launches: the three values, which are locked, the
+/// bookkeeping that decides which unlocked setting compensates, and the last metered brightness
+/// (so the deviation scale reads as it did until the first live reading arrives).
+private struct SavedExposureState: Codable, Equatable {
+    var iso: Int
+    var shutter: Int
+    var aperture: Int
+    var locks: [ExposureSetting]
+    var touchOrder: [ExposureSetting]
+    var manualOverride: ExposureSetting?
+    var sceneEV: Double
+}
+
 /// Holds the user's ISO / shutter / aperture choice and keeps it matched to the metered scene.
 ///
 /// Up to two settings can be locked; a locked setting keeps its value. When the scene or a
@@ -117,9 +130,15 @@ extension ExposureSetting {
 /// Every setting can still be changed by hand. Changing the only unlocked one switches it to
 /// manual, so nothing compensates until it's reset to automatic.
 /// Each setting can only take the values in `allowed` (user limits and camera/lens presets).
+///
+/// The state is saved to `defaults` whenever it changes and restored on the next launch.
 @Observable
 final class ExposureModel {
     static let maxLocks = 2
+    private static let savedStateKey = "exposureState"
+
+    @ObservationIgnored private let defaults: UserDefaults
+    @ObservationIgnored private var lastSaved: SavedExposureState?
 
     private(set) var indices: [ExposureSetting: Int] = [.iso: 6, .shutter: 36, .aperture: 18]
     /// Locked settings, oldest lock first.
@@ -136,7 +155,9 @@ final class ExposureModel {
     /// The only unlocked setting, after the user set it by hand instead of letting it compensate.
     private var manualOverride: ExposureSetting?
 
-    init() {
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        restore()
         compensate()
     }
 
@@ -275,7 +296,49 @@ final class ExposureModel {
         } ?? scale.nearestIndex(toStops: target)
     }
 
+    /// Loads the remembered state, if any, tolerating anything stale or malformed.
+    private func restore() {
+        guard let data = defaults.data(forKey: Self.savedStateKey),
+              let saved = try? JSONDecoder().decode(SavedExposureState.self, from: data) else { return }
+
+        func clamped(_ index: Int, _ setting: ExposureSetting) -> Int {
+            min(max(index, 0), setting.scale.labels.count - 1)
+        }
+        func unique(_ settings: [ExposureSetting]) -> [ExposureSetting] {
+            var seen = Set<ExposureSetting>()
+            return settings.filter { seen.insert($0).inserted }
+        }
+
+        indices = [
+            .iso: clamped(saved.iso, .iso),
+            .shutter: clamped(saved.shutter, .shutter),
+            .aperture: clamped(saved.aperture, .aperture),
+        ]
+        locks = Array(unique(saved.locks).suffix(Self.maxLocks))
+        touchOrder = unique(saved.touchOrder)
+        manualOverride = saved.manualOverride.flatMap { isLocked($0) ? nil : $0 }
+        // Until the first live reading arrives, the light is whatever it last was.
+        sceneEV = saved.sceneEV.isFinite ? saved.sceneEV : settingsEV
+        lastSaved = saved
+    }
+
+    private func save() {
+        let state = SavedExposureState(
+            iso: index(of: .iso), shutter: index(of: .shutter), aperture: index(of: .aperture),
+            locks: locks, touchOrder: touchOrder, manualOverride: manualOverride, sceneEV: sceneEV
+        )
+        // Compensating for the scene runs often but only rarely changes anything, and the light
+        // alone isn't worth a write: it is stored along with the next change of anything else.
+        var previous = lastSaved
+        previous?.sceneEV = state.sceneEV
+        guard state != previous, let data = try? JSONEncoder().encode(state) else { return }
+        defaults.set(data, forKey: Self.savedStateKey)
+        lastSaved = state
+    }
+
     private func compensate() {
+        // Every change to the state ends here, so this is also where it is remembered.
+        defer { save() }
         guard let target = adjusting else { return }
         let others = ExposureSetting.allCases
             .filter { $0 != target }

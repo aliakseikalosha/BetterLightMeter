@@ -24,6 +24,8 @@ FocusIndicator(bias: camera.bias, biasLimit: camera.biasLimit, showsTrack: isDra
 
 A −3…+3 EV scale drawn with `Canvas`. Ticks every 1/3 EV (major each whole EV with a label); a needle shows `deviation` (positive = overexposed). Beyond ±3 the needle is clamped to the end and turns red. The text below reads "Correct exposure" within 0.05 EV, otherwise "Overexposed/Underexposed by x.x EV", highlighted when over 1/3 EV off.
 
+The needle always sticks to the closest tick mark: its position is `deviation` rounded to the nearest 1/3 EV. The settings move in 1/3 stops at best, and in whole stops for some gear (the Minolta X-700 preset), so the true deviation rarely lands on a mark and a needle drawn at the exact value would hover between marks. The text below always gives the exact amount.
+
 ```swift
 ExposureScale(deviation: meter.deviation)
 ```

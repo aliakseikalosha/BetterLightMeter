@@ -38,7 +38,7 @@ ExposureSetting.iso.allIndices                         // 0..<31
 
 ## ExposureModel
 
-An `@Observable` class that holds the current `indices` (one per setting) and the metered `sceneEV`.
+An `@Observable` class that holds the current `indices` (one per setting) and the metered `sceneEV`. It remembers its state between launches (see [Remembering the state](#remembering-the-state)).
 
 ### Locking and compensation
 
@@ -71,6 +71,16 @@ meter.label(of: .shutter)            // "1/125"
 Preset limits come in through `setAllowed(_:)` (fed by `EffectiveLimits.all`, see [AppSettings](AppSettings.md)). Current values are moved to the nearest allowed value, then `compensate()` runs. A setting with a single allowed value is *fixed* and not editable. `select` rejects indices that are not allowed.
 
 `setHeld(_:currentEV:)` freezes live readings; releasing applies the latest one.
+
+### Remembering the state
+
+The model saves itself to `UserDefaults` (key `exposureState`, JSON) and restores on the next launch, so the wheels and locks come back as they were left. `init(defaults:)` takes the store, which defaults to `.standard`.
+
+What is saved: the three `indices`, `locks`, `touchOrder` and `manualOverride` (so the same wheel stays automatic and a hand-set one stays manual), and the last `sceneEV` (so the deviation scale reads as before until the first live reading arrives).
+
+- Every change to the state ends in `compensate()`, which calls `save()`. It only writes when something other than `sceneEV` changed; the light alone would mean a write every time the camera moves, so it is stored along with the next real change.
+- `restore()` tolerates stale or damaged data: indices are clamped to their scale, locks are de-duplicated and cut to `maxLocks`, and a `manualOverride` on a locked setting is dropped. Data that does not decode is ignored and the defaults are used.
+- After a restore, `setAllowed(_:)` still moves values into the range of the selected camera and lens, so a remembered value never escapes the presets.
 
 ## Example: metering sequence
 

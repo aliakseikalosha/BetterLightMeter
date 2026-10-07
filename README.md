@@ -15,6 +15,8 @@ An iPhone light meter for a photographers. Point the phone at the scene and get 
 - **Lens simulation** adjust viewfinder to simulate selected lens's field of view,in case lens is wider than the iPhone can go are shown with a black border.
 - **Camera-style controls**: tap to focus and meter, long press for AE/AF lock, drag up or down for exposure
   compensation, and a hold button to freeze a reading.
+- **Remembers your setup**: ISO, shutter, aperture and which of them are locked come back as you left them.
+- **Portrait and landscape**: hold the phone either way, in landscape the controls move to a column beside the viewfinder.
 - **Photos with the reading printed on them**, saved to the album of your choice, with optional geotag.
 - **Custom presets** for camera and it's lens can be imported from [JSON](#presets).
 - **Localized**: English, Belarusian, Czech.

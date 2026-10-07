@@ -22,6 +22,14 @@ A `UIViewRepresentable` that shows the live camera feed and turns touches into t
 - `setContentScale(_:animated:)` applies a scale transform, animated over 0.25 s from `updateUIView`.
 - `devicePoint(for:)` converts a view point to camera coordinates and clamps to 0…1, so taps in the border map to the nearest edge.
 
+## Rotation
+
+The picture has to be turned to match the interface orientation, or landscape would show it sideways. `PreviewView` creates an `AVCaptureDevice.RotationCoordinator` for the `device` it is given and the preview layer, and copies `videoRotationAngleForHorizonLevelPreview` to the layer's connection, both when the angle changes (KVO) and from `updateUIView`.
+
+- The coordinator needs the layer to be in a window, so it is (re)built from `setDevice(_:)` and `didMoveToWindow()`.
+- The layer's connection only exists once the session has its input, which happens shortly after the device is known. `updateUIView` runs on every camera state change, so it applies the angle again then.
+- Tap points need no extra handling: `captureDevicePointConverted` already accounts for the connection's rotation.
+
 `Coordinator` forwards the recognizers' actions to the closures. `updateUIView` refreshes `coordinator.parent`, so the closures are never stale.
 
 ## Example
@@ -29,6 +37,7 @@ A `UIViewRepresentable` that shows the live camera feed and turns touches into t
 ```swift
 CameraPreview(
     session: camera.session,
+    device: camera.device,
     contentScale: camera.previewScale,
     onTap: { point, devicePoint in
         focusPoint = point

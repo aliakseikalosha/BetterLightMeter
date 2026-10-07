@@ -6,6 +6,8 @@ import UIKit
 /// long press for AE/AF lock, vertical drag for exposure compensation.
 struct CameraPreview: UIViewRepresentable {
     let session: AVCaptureSession
+    /// The camera feeding `session`; used to keep the picture upright as the phone rotates.
+    var device: AVCaptureDevice?
     /// Below 1 the picture is shrunk inside a black frame (the lens is wider than the phone's).
     var contentScale: CGFloat = 1
     /// Point in view coordinates, point in device (0...1) coordinates.
@@ -37,6 +39,10 @@ struct CameraPreview: UIViewRepresentable {
     func updateUIView(_ uiView: PreviewView, context: Context) {
         context.coordinator.parent = self
         uiView.setContentScale(contentScale, animated: true)
+        uiView.setDevice(device)
+        // The connection only exists once the session has its input, which happens after the
+        // device is known; every state change of the camera passes through here.
+        uiView.applyPreviewRotation()
     }
 
     /// Gestures live on this view so they keep working in the black border;
@@ -48,6 +54,11 @@ struct CameraPreview: UIViewRepresentable {
 
         private let layerView = LayerView()
         private var scale: CGFloat = 1
+        private var device: AVCaptureDevice?
+        private var rotationCoordinator: AVCaptureDevice.RotationCoordinator?
+        private var rotationObservation: NSKeyValueObservation?
+        /// True until the coordinator's current angle has been put on the layer's connection.
+        private var rotationPending = false
 
         var previewLayer: AVCaptureVideoPreviewLayer {
             // swiftlint:disable:next force_cast
@@ -68,6 +79,47 @@ struct CameraPreview: UIViewRepresentable {
             // Not `frame`: it is undefined while a transform is applied.
             layerView.bounds = CGRect(origin: .zero, size: bounds.size)
             layerView.center = CGPoint(x: bounds.midX, y: bounds.midY)
+        }
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            // The coordinator reads the interface orientation from the layer's window.
+            updateRotationTracking()
+        }
+
+        func setDevice(_ newDevice: AVCaptureDevice?) {
+            guard newDevice !== device else { return }
+            device = newDevice
+            updateRotationTracking()
+        }
+
+        private func updateRotationTracking() {
+            rotationObservation = nil
+            rotationCoordinator = nil
+            guard let device, window != nil else { return }
+            let coordinator = AVCaptureDevice.RotationCoordinator(device: device, previewLayer: previewLayer)
+            rotationCoordinator = coordinator
+            rotationObservation = coordinator.observe(\.videoRotationAngleForHorizonLevelPreview) { [weak self] _, _ in
+                Task { @MainActor in
+                    self?.rotationPending = true
+                    self?.applyPreviewRotation()
+                }
+            }
+            rotationPending = true
+            applyPreviewRotation()
+        }
+
+        /// Rotates the picture to match how the interface is oriented, so the horizon stays level
+        /// in portrait and in both landscapes. Cheap when there is nothing to do, as it is called
+        /// on every update of the view.
+        func applyPreviewRotation() {
+            guard rotationPending,
+                  let angle = rotationCoordinator?.videoRotationAngleForHorizonLevelPreview,
+                  let connection = previewLayer.connection else { return }
+            rotationPending = false
+            if connection.isVideoRotationAngleSupported(angle), connection.videoRotationAngle != angle {
+                connection.videoRotationAngle = angle
+            }
         }
 
         func setContentScale(_ newScale: CGFloat, animated: Bool) {

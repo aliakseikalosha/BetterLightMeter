@@ -18,9 +18,16 @@ struct ContentView: View {
     @State private var lastPhoto: UIImage?
 
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
 
     /// Points of vertical drag per 1 EV of exposure compensation.
     private let pointsPerEV: CGFloat = 110
+
+    /// Width of the column holding the controls when the phone is held sideways.
+    private let landscapeControlsWidth: CGFloat = 320
+
+    /// iPhones only get a compact height in landscape.
+    private var isLandscape: Bool { verticalSizeClass == .compact }
 
     private var selectedCamera: CameraPreset? { presets.camera(named: settings.cameraName) }
     private var selectedLens: LensPreset? { selectedCamera?.lenses.first { $0.name == settings.lensName } }
@@ -34,24 +41,20 @@ struct ContentView: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
+        // One view tree for both orientations: rotating only moves things, so the camera
+        // preview and the wheels are never torn down and rebuilt.
+        MeterLayout(isLandscape: isLandscape, controlsWidth: landscapeControlsWidth) {
             topBar
+                .padding(.top, isLandscape ? 4 : 0)
             viewfinder
-            ExposureScale(deviation: meter.deviation)
-                .padding(.horizontal, 16)
-                .padding(.top, 10)
-            VStack(spacing: 6) {
-                ForEach(ExposureSetting.allCases) { setting in
-                    SettingRow(setting: setting, meter: meter)
-                }
-            }
-            .padding(.horizontal, 12)
-            .padding(.top, 8)
-            bottomBar
+                .padding(.vertical, isLandscape ? 4 : 0)
+            controls
         }
         .background(Color.black.ignoresSafeArea())
         .preferredColorScheme(.dark)
         .onAppear { camera.start(); if settings.saveLocation { location.start() } }
+        // The focus square is in viewfinder coordinates, which no longer mean the same place.
+        .onChange(of: isLandscape) { focusPoint = nil }
         .onChange(of: settings.saveLocation) { _, isOn in
             if isOn { location.start() } else { location.stop() }
         }
@@ -88,6 +91,29 @@ struct ContentView: View {
     }
 
     // MARK: - Sections
+
+    /// Everything under the viewfinder in portrait, or under the top bar beside it in landscape.
+    private var controls: some View {
+        VStack(spacing: 0) {
+            ExposureScale(deviation: meter.deviation)
+                .padding(.horizontal, 16)
+                .padding(.top, isLandscape ? 4 : 10)
+            settingRows
+                .padding(.top, 8)
+            // Pushes the shutter row to the bottom of the landscape column; has no height in portrait.
+            Spacer(minLength: 0)
+            bottomBar
+        }
+    }
+
+    private var settingRows: some View {
+        VStack(spacing: 6) {
+            ForEach(ExposureSetting.allCases) { setting in
+                SettingRow(setting: setting, meter: meter)
+            }
+        }
+        .padding(.horizontal, 12)
+    }
 
     private var topBar: some View {
         HStack(alignment: .center) {
@@ -128,7 +154,7 @@ struct ContentView: View {
         }
         .foregroundStyle(.white)
         .padding(.horizontal, 16)
-        .frame(height: 48)
+        .frame(height: isLandscape ? 40 : 48)
     }
 
     private var viewfinder: some View {
@@ -136,6 +162,7 @@ struct ContentView: View {
             ZStack {
                 CameraPreview(
                     session: camera.session,
+                    device: camera.device,
                     contentScale: camera.previewScale,
                     onTap: { point, devicePoint in
                         focusPoint = point
@@ -317,7 +344,7 @@ struct ContentView: View {
             .frame(maxWidth: .infinity, alignment: .trailing)
         }
         .padding(.horizontal, 32)
-        .padding(.vertical, 12)
+        .padding(.vertical, isLandscape ? 6 : 12)
     }
 
     /// Preview of the last captured photo; opens the Photos app.
@@ -430,6 +457,56 @@ struct ContentView: View {
         guard seconds > 0 else { return "–" }
         if seconds >= 0.5 { return String(format: "%.1f\"", seconds) }
         return "1/\(Int((1 / seconds).rounded()))"
+    }
+}
+
+/// Places three views, in order: top bar, viewfinder, controls.
+/// Portrait stacks them vertically. Landscape puts the viewfinder on the left and the top bar
+/// above the controls in a column on the right.
+private struct MeterLayout: Layout {
+    let isLandscape: Bool
+    let controlsWidth: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        proposal.replacingUnspecifiedDimensions()
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        guard subviews.count == 3 else { return }
+        let topBar = subviews[0], viewfinder = subviews[1], controls = subviews[2]
+
+        if isLandscape {
+            let columnX = bounds.maxX - controlsWidth
+            let topHeight = topBar.sizeThatFits(ProposedViewSize(width: controlsWidth, height: nil)).height
+            viewfinder.place(
+                at: bounds.origin, anchor: .topLeading,
+                proposal: ProposedViewSize(width: bounds.width - controlsWidth, height: bounds.height)
+            )
+            topBar.place(
+                at: CGPoint(x: columnX, y: bounds.minY), anchor: .topLeading,
+                proposal: ProposedViewSize(width: controlsWidth, height: topHeight)
+            )
+            controls.place(
+                at: CGPoint(x: columnX, y: bounds.minY + topHeight), anchor: .topLeading,
+                proposal: ProposedViewSize(width: controlsWidth, height: bounds.height - topHeight)
+            )
+        } else {
+            let widthOnly = ProposedViewSize(width: bounds.width, height: nil)
+            let topHeight = topBar.sizeThatFits(widthOnly).height
+            let controlsHeight = controls.sizeThatFits(widthOnly).height
+            topBar.place(
+                at: bounds.origin, anchor: .topLeading,
+                proposal: ProposedViewSize(width: bounds.width, height: topHeight)
+            )
+            viewfinder.place(
+                at: CGPoint(x: bounds.minX, y: bounds.minY + topHeight), anchor: .topLeading,
+                proposal: ProposedViewSize(width: bounds.width, height: max(0, bounds.height - topHeight - controlsHeight))
+            )
+            controls.place(
+                at: CGPoint(x: bounds.minX, y: bounds.maxY - controlsHeight), anchor: .topLeading,
+                proposal: ProposedViewSize(width: bounds.width, height: controlsHeight)
+            )
+        }
     }
 }
 
