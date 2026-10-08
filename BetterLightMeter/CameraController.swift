@@ -4,6 +4,11 @@ import UIKit
 
 /// Runs the back camera in auto exposure and publishes the exposure the camera picked,
 /// which is what the light meter reads.
+///
+/// The main thread never reads from or waits on the camera: everything that touches a device or
+/// the session runs on `sessionQueue` and hands results back. While the session switches cameras,
+/// device reads can block, and the session can itself wait on the main thread (for the preview),
+/// so a read from the main thread could freeze the app.
 @Observable
 final class CameraController {
     enum Status {
@@ -18,16 +23,50 @@ final class CameraController {
     private(set) var bias: Float = 0
     private(set) var isAEAFLocked = false
     /// 1 normally; below 1 when the simulated lens is wider than the phone can go,
-    /// meaning the picture should be drawn that much smaller inside a black frame.
+    /// meaning the picture should be drawn that much smaller inside a black frame;
+    /// above 1 when measuring distance keeps the camera from zooming far enough, meaning the
+    /// picture should be enlarged by that much (digital zoom).
     private(set) var previewScale: CGFloat = 1
+
+    /// The phone has a LiDAR scanner (or there's no camera and distances are made up).
+    private(set) var supportsDistance = false
+    /// Whether distance is being measured right now: it is turned on and the LiDAR camera is in use
+    /// (it isn't for lenses that need the ultra wide).
+    private(set) var isMeasuringDistance = false
+    /// The session is moving to another camera (e.g. distance was just turned on), until the new
+    /// one shows the right zoom. The viewfinder holds the last frame meanwhile.
+    private(set) var isSwitchingCamera = false
 
     /// Range the sun slider is allowed to move in.
     let biasLimit: Float = 3
 
+    /// Distance to the point of interest, from the LiDAR scanner.
+    let depth = DepthSensor()
+
     @ObservationIgnored let session = AVCaptureSession()
     @ObservationIgnored private let sessionQueue = DispatchQueue(label: "BetterLightMeter.camera")
     /// The active camera; the viewfinder needs it to keep the preview upright when the phone is rotated.
+    /// Only set once the session has switched to it.
     private(set) var device: AVCaptureDevice?
+    @ObservationIgnored private var isConfigured = false
+    /// The camera in use or being switched to.
+    @ObservationIgnored private var targetDevice: AVCaptureDevice?
+    /// Wide camera paired with the LiDAR scanner; delivers depth, but has no ultra wide.
+    @ObservationIgnored private var lidarDevice: AVCaptureDevice?
+    /// The best camera without depth: includes the ultra wide on phones that have one.
+    @ObservationIgnored private var multiCameraDevice: AVCaptureDevice?
+    /// Accessed on `sessionQueue`.
+    @ObservationIgnored private var input: AVCaptureDeviceInput?
+    /// The user wants distance measured (`setMeasuresDistance`).
+    @ObservationIgnored private var measuresDistance = false
+    /// Zooms the camera may use while delivering depth; empty when it isn't.
+    @ObservationIgnored private var depthZoomRanges: [ClosedRange<CGFloat>] = []
+    /// Main camera zoom of `multiCameraDevice` (see `mainCameraZoom(of:)`); above 1 means it has an ultra wide.
+    @ObservationIgnored private var multiCameraZoom: CGFloat = 1
+    /// Exposure compensation the active camera supports.
+    @ObservationIgnored private var biasRange: ClosedRange<Float> = -8...8
+    /// A poll is waiting on `sessionQueue`; the next one is skipped rather than piling up.
+    @ObservationIgnored private var isPollPending = false
     @ObservationIgnored private var pollTimer: Timer?
     @ObservationIgnored private let photoOutput = AVCapturePhotoOutput()
     @ObservationIgnored private var rotationCoordinator: AVCaptureDevice.RotationCoordinator?
@@ -59,7 +98,9 @@ final class CameraController {
     // MARK: - Session
 
     func start() {
-        if device != nil {
+        if isConfigured {
+            // Without a device, either there is no camera or `configure()` is still starting it.
+            guard device != nil else { return }
             sessionQueue.async { [session] in
                 if !session.isRunning { session.startRunning() }
             }
@@ -90,49 +131,183 @@ final class CameraController {
     }
 
     private func configure() {
-        // Prefer a multi-camera device so the ultra wide is available for wide lenses.
+        isConfigured = true
+        // A multi-camera device makes the ultra wide available for wide lenses.
         let discovery = AVCaptureDevice.DiscoverySession(
             deviceTypes: [.builtInTripleCamera, .builtInDualWideCamera, .builtInDualCamera, .builtInWideAngleCamera],
             mediaType: .video,
             position: .back
         )
-        guard let device = discovery.devices.first,
-              let input = try? AVCaptureDeviceInput(device: device) else {
-            status = .unavailable
-            return
-        }
-        self.device = device
+        multiCameraDevice = discovery.devices.first
+        multiCameraZoom = multiCameraDevice.map(Self.mainCameraZoom(of:)) ?? 1
+        lidarDevice = AVCaptureDevice.default(.builtInLiDARDepthCamera, for: .video, position: .back)
         if let fov = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back)?.activeFormat.videoFieldOfView, fov > 0 {
             // Horizontal field of view against the 36mm width of a full-frame sensor.
             wideEquivalent = 18 / tan(Double(fov) * .pi / 360)
         }
-        if device.constituentDevices.first?.deviceType == .builtInUltraWideCamera,
-           let switchOver = device.virtualDeviceSwitchOverVideoZoomFactors.first {
-            baseZoom = CGFloat(truncating: switchOver)
-        } else {
-            baseZoom = 1
+        guard let device = preferredDevice() else {
+            status = .unavailable
+            supportsDistance = true
+            depth.simulate()
+            isMeasuringDistance = measuresDistance
+            depth.setActive(measuresDistance)
+            return
         }
-        applyZoom()
-        rotationCoordinator = AVCaptureDevice.RotationCoordinator(device: device, previewLayer: nil)
+        supportsDistance = lidarDevice != nil
 
         sessionQueue.async { [session, photoOutput] in
             session.beginConfiguration()
             session.sessionPreset = .photo
-            if session.canAddInput(input) {
-                session.addInput(input)
-            }
             if session.canAddOutput(photoOutput) {
                 session.addOutput(photoOutput)
                 photoOutput.maxPhotoQualityPrioritization = .balanced
             }
             session.commitConfiguration()
-            session.startRunning()
+        }
+        use(device) {
+            self.status = .running
+            self.startPolling()
+            self.sessionQueue.async { [session = self.session] in session.startRunning() }
+        }
+    }
 
-            DispatchQueue.main.async {
-                self.status = .running
-                self.startPolling()
+    // MARK: - Distance
+
+    /// Measures distance with the LiDAR scanner, or stops. Measuring means using the LiDAR camera,
+    /// which can't zoom as far, so it is off unless asked for.
+    func setMeasuresDistance(_ isOn: Bool) {
+        guard isOn != measuresDistance else { return }
+        measuresDistance = isOn
+        if status == .unavailable {
+            isMeasuringDistance = isOn
+            depth.setActive(isOn)
+        } else {
+            switchToPreferredDevice()
+        }
+    }
+
+    /// The LiDAR camera measures distance but has no ultra wide, and delivering depth limits its
+    /// zoom. So it is only used while measuring, for lenses that don't need the ultra wide.
+    private func preferredDevice() -> AVCaptureDevice? {
+        let needsUltraWide = multiCameraZoom > 1 && (targetEquivalent ?? wideEquivalent) < wideEquivalent
+        if measuresDistance, let lidarDevice, !needsUltraWide { return lidarDevice }
+        return multiCameraDevice ?? lidarDevice
+    }
+
+    private func switchToPreferredDevice() {
+        // Before `configure()` there's nothing to switch; it picks the camera itself.
+        if let preferred = preferredDevice(), targetDevice != nil, preferred !== targetDevice {
+            use(preferred)
+        } else {
+            applyZoom()
+        }
+    }
+
+    /// Zoom factor of the main camera: not 1 on virtual devices that include an ultra wide.
+    private static func mainCameraZoom(of device: AVCaptureDevice) -> CGFloat {
+        if device.constituentDevices.first?.deviceType == .builtInUltraWideCamera,
+           let switchOver = device.virtualDeviceSwitchOverVideoZoomFactors.first {
+            return CGFloat(truncating: switchOver)
+        }
+        return 1
+    }
+
+    /// Feeds the session from another camera. `device` changes only once the session has,
+    /// so the preview never sets up its rotation on the old connection.
+    private func use(_ newDevice: AVCaptureDevice, then completion: (() -> Void)? = nil) {
+        guard newDevice !== targetDevice else { return }
+        let previousDevice = targetDevice
+        targetDevice = newDevice
+        depth.setActive(false)
+        isMeasuringDistance = false
+        // The viewfinder freezes its last frame on this change; the switch waits for a screen
+        // update or two so that happens before the picture goes.
+        isSwitchingCamera = true
+        let wantsDepth = newDevice === lidarDevice && measuresDistance
+        let newBaseZoom = newDevice === multiCameraDevice ? multiCameraZoom : 1
+
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [self] in
+            sessionQueue.async { [self] in
+                guard let newInput = try? AVCaptureDeviceInput(device: newDevice) else {
+                    DispatchQueue.main.async { [self] in
+                        if targetDevice === newDevice {
+                            targetDevice = previousDevice
+                            isSwitchingCamera = false
+                        }
+                    }
+                    return
+                }
+                session.beginConfiguration()
+                if let input { session.removeInput(input) }
+                // The depth output would make other cameras deliver depth too, which limits their zoom.
+                if session.outputs.contains(depth.output) { session.removeOutput(depth.output) }
+                if session.canAddInput(newInput) {
+                    session.addInput(newInput)
+                    input = newInput
+                }
+                var hasDepth = false
+                if wantsDepth, session.canAddOutput(depth.output) {
+                    session.addOutput(depth.output)
+                    hasDepth = true
+                }
+                session.commitConfiguration()
+                if hasDepth { Self.selectDepthFormat(on: newDevice) }
+                let zoomRanges = hasDepth ? newDevice.activeFormat.supportedVideoZoomRangesForDepthDataDelivery : []
+                let newBiasRange = newDevice.minExposureTargetBias...newDevice.maxExposureTargetBias
+
+                DispatchQueue.main.async { [self] in
+                    device = newDevice
+                    depthZoomRanges = zoomRanges
+                    isMeasuringDistance = hasDepth
+                    depth.setActive(hasDepth)
+                    baseZoom = newBaseZoom
+                    biasRange = newBiasRange
+                    rotationCoordinator = AVCaptureDevice.RotationCoordinator(device: newDevice, previewLayer: nil)
+                    // The new camera starts with its own metering.
+                    bias = 0
+                    isAEAFLocked = false
+                    completion?()
+                    applyZoom { [self] in
+                        // Give the new zoom a moment to reach the screen before showing it.
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) { [self] in
+                            if targetDevice === newDevice, device === newDevice { isSwitchingCamera = false }
+                        }
+                    }
+                }
             }
         }
+    }
+
+    /// Picks the most detailed depth the current picture format offers, switching to a format
+    /// with depth if the session preset chose one without.
+    private static func selectDepthFormat(on device: AVCaptureDevice) {
+        func depthFormats(of format: AVCaptureDevice.Format) -> [AVCaptureDevice.Format] {
+            format.supportedDepthDataFormats.filter {
+                let type = $0.formatDescription.mediaSubType.rawValue
+                return type == kCVPixelFormatType_DepthFloat32 || type == kCVPixelFormatType_DepthFloat16
+            }
+        }
+        func pixels(_ format: AVCaptureDevice.Format) -> Int32 {
+            let size = format.formatDescription.dimensions
+            return size.width * size.height
+        }
+
+        var format = device.activeFormat
+        if depthFormats(of: format).isEmpty {
+            // Same shape as the photo the preset picked, so the viewfinder doesn't change.
+            let size = format.formatDescription.dimensions
+            let candidates = device.formats.filter {
+                let candidate = $0.formatDescription.dimensions
+                return !depthFormats(of: $0).isEmpty && candidate.width * size.height == candidate.height * size.width
+            }
+            guard let best = candidates.max(by: { pixels($0) < pixels($1) }) else { return }
+            format = best
+        }
+        guard let depthFormat = depthFormats(of: format).max(by: { pixels($0) < pixels($1) }),
+              (try? device.lockForConfiguration()) != nil else { return }
+        if format != device.activeFormat { device.activeFormat = format }
+        device.activeDepthDataFormat = depthFormat
+        device.unlockForConfiguration()
     }
 
     // MARK: - Lens simulation
@@ -142,29 +317,58 @@ final class CameraController {
     func setEquivalentFocalLength(_ millimeters: Double?) {
         guard millimeters != targetEquivalent else { return }
         targetEquivalent = millimeters
-        applyZoom()
+        switchToPreferredDevice()
     }
 
-    private func applyZoom() {
-        let wanted = CGFloat((targetEquivalent ?? wideEquivalent) / wideEquivalent) * baseZoom
-        let lower = device?.minAvailableVideoZoomFactor ?? 1
-        let upper = min(device?.maxAvailableVideoZoomFactor ?? 10 * baseZoom, 10 * baseZoom)
-        let zoom = min(max(wanted, lower), upper)
-        // Only the "too wide" case needs a border; "too long" just stays at maximum zoom.
-        let scale = min(wanted / zoom, 1)
-        if previewScale != scale { previewScale = scale }
+    /// Zooms the active camera for the lens and sets `previewScale`; `completion` runs on the main
+    /// thread once both are done (not at all if the camera changed meanwhile).
+    private func applyZoom(then completion: (() -> Void)? = nil) {
+        let wanted = min(CGFloat((targetEquivalent ?? wideEquivalent) / wideEquivalent) * baseZoom, 10 * baseZoom)
+        guard let device else {
+            // No camera (yet): a too-wide lens still gets its border.
+            let scale = min(wanted, 1)
+            if previewScale != scale { previewScale = scale }
+            completion?()
+            return
+        }
+        guard device === targetDevice else { return }
+        let ranges = depthZoomRanges
 
-        guard let device else { return }
-        sessionQueue.async {
-            guard (try? device.lockForConfiguration()) != nil else { return }
-            device.videoZoomFactor = zoom
-            device.unlockForConfiguration()
+        sessionQueue.async { [self] in
+            let zoom: CGFloat
+            if ranges.isEmpty {
+                zoom = min(max(wanted, device.minAvailableVideoZoomFactor), device.maxAvailableVideoZoomFactor)
+            } else {
+                // While delivering depth the camera only zooms within these ranges (and setting
+                // another zoom can throw), so it goes as far as they allow and the rest is digital.
+                zoom = Self.depthZoom(closestTo: wanted, in: ranges)
+            }
+            if (try? device.lockForConfiguration()) != nil {
+                device.videoZoomFactor = zoom
+                device.unlockForConfiguration()
+            }
+            // Too wide always needs a border. Too long is enlarged while measuring distance, and
+            // otherwise just stays at maximum zoom.
+            let scale = ranges.isEmpty ? min(wanted / zoom, 1) : wanted / zoom
+
+            DispatchQueue.main.async { [self] in
+                guard device === targetDevice else { return }
+                if previewScale != scale { previewScale = scale }
+                completion?()
+            }
         }
     }
 
-    /// Draws a photo smaller on black to match what the framed viewfinder showed.
+    /// The largest zoom depth allows that isn't past `wanted`, or the smallest there is.
+    private static func depthZoom(closestTo wanted: CGFloat, in ranges: [ClosedRange<CGFloat>]) -> CGFloat {
+        let notPast = ranges.filter { $0.lowerBound <= wanted }.map { min($0.upperBound, wanted) }
+        return notPast.max() ?? ranges.map(\.lowerBound).min() ?? 1
+    }
+
+    /// Matches a photo to what the viewfinder showed: smaller on black for a lens wider than
+    /// the phone, or the middle enlarged when measuring distance limited the zoom.
     private static func framed(_ image: UIImage, scale: CGFloat) -> UIImage {
-        guard scale < 1 else { return image }
+        guard scale != 1 else { return image }
         let format = UIGraphicsImageRendererFormat()
         format.scale = image.scale
         format.opaque = true
@@ -188,12 +392,21 @@ final class CameraController {
     }
 
     private func poll() {
-        guard let device else { return }
-        // Only assign on change so SwiftUI doesn't re-render ten times a second for nothing.
-        if iso != device.iso { iso = device.iso }
-        let duration = device.exposureDuration.seconds
-        if exposureDuration != duration { exposureDuration = duration }
-        if aperture != device.lensAperture { aperture = device.lensAperture }
+        guard let device, !isPollPending else { return }
+        isPollPending = true
+        sessionQueue.async { [self] in
+            let newISO = device.iso
+            let duration = device.exposureDuration.seconds
+            let newAperture = device.lensAperture
+            DispatchQueue.main.async { [self] in
+                isPollPending = false
+                guard device === self.device else { return }
+                // Only assign on change so SwiftUI doesn't re-render ten times a second for nothing.
+                if iso != newISO { iso = newISO }
+                if exposureDuration != duration { exposureDuration = duration }
+                if aperture != newAperture { aperture = newAperture }
+            }
+        }
     }
 
     // MARK: - Photo
@@ -271,10 +484,7 @@ final class CameraController {
     }
 
     func setBias(_ value: Float) {
-        var limit = (-biasLimit)...biasLimit
-        if let device {
-            limit = max(limit.lowerBound, device.minExposureTargetBias)...min(limit.upperBound, device.maxExposureTargetBias)
-        }
+        let limit = max(-biasLimit, biasRange.lowerBound)...min(biasLimit, biasRange.upperBound)
         let clamped = min(max(value, limit.lowerBound), limit.upperBound)
         guard clamped != bias else { return }
         bias = clamped

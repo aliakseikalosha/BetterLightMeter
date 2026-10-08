@@ -5,8 +5,10 @@
       "iso": { "min": 12, "max": 3200 },
       "shutter": { "min": "4", "max": "1/1000", "fullStops": true },
       "lenses": [
+        { "name": "Minolta MD 17mm f/4.0", "focalLength": 17, "aperture": { "min": 4, "max": 22 } },
         { "name": "Minolta MD 28mm f/2.8", "focalLength": 28, "aperture": { "min": 2.8, "max": 22 } },
-        { "name": "Minolta MD 50mm f/1.4", "focalLength": 50, "aperture": { "min": 1.4, "max": 16 } }
+        { "name": "Minolta MD 50mm f/1.4", "focalLength": 50, "aperture": { "min": 1.4, "max": 16 } },
+        { "name": "Minolta MD 135mm f/2.8", "focalLength": 135, "aperture": { "min": 2.8, "max": 22 } }
       ]
     },
     {

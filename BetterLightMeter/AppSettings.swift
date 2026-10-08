@@ -40,8 +40,14 @@ final class AppSettings {
         didSet { defaults.set(simulateLens, forKey: "simulateLens") }
     }
 
+    /// Whether the LiDAR scanner measures the distance to the metering point.
+    var measureDistance: Bool {
+        didSet { defaults.set(measureDistance, forKey: "measureDistance") }
+    }
+
     init() {
         simulateLens = defaults.object(forKey: "simulateLens") as? Bool ?? true
+        measureDistance = defaults.bool(forKey: "measureDistance")
         saveLocation = defaults.object(forKey: "saveLocation") as? Bool ?? true
         // nil = never chosen (use the default), "" = the user picked "None".
         if let storedCamera = defaults.string(forKey: "cameraName") {

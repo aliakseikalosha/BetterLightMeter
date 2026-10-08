@@ -191,3 +191,21 @@ private struct ShutterPressStyle: ButtonStyle {
             .animation(.easeOut(duration: 0.12), value: configuration.isPressed)
     }
 }
+
+/// Distances the way the user's region writes them: metres, or feet in the US.
+enum DistanceFormat {
+    static var usesFeet: Bool { Locale.current.measurementSystem == .us }
+
+    static func text(meters: Double) -> String {
+        let length = Measurement(value: meters, unit: UnitLength.meters)
+        if usesFeet {
+            return length.converted(to: .feet).formatted(
+                .measurement(width: .abbreviated, usage: .asProvided, numberFormatStyle: .number.precision(.fractionLength(1)))
+            )
+        }
+        return length.formatted(
+            .measurement(width: .abbreviated, usage: .asProvided, numberFormatStyle: .number.precision(.fractionLength(2)))
+        )
+    }
+
+}

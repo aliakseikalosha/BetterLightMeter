@@ -13,6 +13,8 @@ An iPhone light meter for a photographers. Point the phone at the scene and get 
 - **Camera and lens presets** limit ISO, shutter speed and aperture to what your gear supports, including
   full-stop-only shutters and leaf shutters built into the lens, you can add your own for faster access.
 - **Lens simulation** adjust viewfinder to simulate selected lens's field of view,in case lens is wider than the iPhone can go are shown with a black border.
+- **Distance with LiDAR**: on iPhones with a LiDAR scanner, the ruler button turns on distance metering, and the
+  viewfinder shows the distance to the point you tapped, or to the center of the frame.
 - **Camera-style controls**: tap to focus and meter, long press for AE/AF lock, drag up or down for exposure
   compensation, and a hold button to freeze a reading.
 - **Remembers your setup**: ISO, shutter, aperture and which of them are locked come back as you left them.

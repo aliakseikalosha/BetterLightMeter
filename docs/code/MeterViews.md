@@ -58,3 +58,11 @@ Camera-style round button. While `isBusy` it is dimmed, disabled and shows a `Pr
 ```swift
 ShutterButton(isBusy: isCapturing) { takePicture() }
 ```
+
+## DistanceFormat
+
+Formats distances for the user's region: metres with two decimals, or feet with one where the measurement system is US (`usesFeet`). Uses `Measurement` formatting, so the decimal separator and unit follow the locale.
+
+```swift
+DistanceFormat.text(meters: 1.8)   // "1.80 m", or "5.9 ft"
+```

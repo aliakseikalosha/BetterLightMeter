@@ -35,7 +35,19 @@ The main screen. It creates the models, wires them together and lays out the UI.
 .onChange(of: simulatedFocalLength, initial: true) { _, mm in
     camera.setEquivalentFocalLength(mm)
 }
+
+// Metering point → LiDAR: measure the distance where the camera focuses
+.onChange(of: meteringPoint, initial: true) { _, point in
+    camera.depth.measure(at: point)
+}
+
+// Ruler button → camera: measure distance (LiDAR camera) or not
+.onChange(of: settings.measureDistance, initial: true) { _, isOn in
+    camera.setMeasuresDistance(isOn)
+}
 ```
+
+`meteringPoint` is the device point (0…1) the camera focuses and meters at: the centre until the user taps, and again after the reset button or when the camera changes (`.onChange(of: camera.device)`, e.g. switching to the ultra wide for a wide lens). Unlike `focusPoint`, it stays valid when the phone is rotated.
 
 Lifecycle: the camera starts on appear and when the scene becomes active, and stops in the background. Location updates follow the `saveLocation` setting.
 
@@ -54,16 +66,16 @@ Keep it one tree. An earlier version switched between two `if` branches, which d
 
 ## Sections
 
-1. **`topBar`**: scene EV, the compensation value when non-zero, an `AE/AF LOCK` or `LIVE` badge, and the settings button.
-2. **`viewfinder`**: a `ZStack` of the [`CameraPreview`](CameraPreview.md), a placeholder (camera unavailable, or a permission prompt with *Open Settings*), the [`FocusIndicator`](MeterViews.md), the camera readout (ISO, shutter and aperture the phone chose, and the simulated focal length), the gear/lens menu, a toast, and the white capture flash.
+1. **`topBar`**: scene EV, the compensation value when non-zero, an `AE/AF LOCK` or `LIVE` badge, the distance toggle (ruler, yellow when on; only with LiDAR, `camera.supportsDistance`), and the settings button.
+2. **`viewfinder`**: a `ZStack` of the [`CameraPreview`](CameraPreview.md), a placeholder (camera unavailable, or a permission prompt with *Open Settings*), the [`FocusIndicator`](MeterViews.md), the camera readout (while distance is on, the LiDAR distance to `meteringPoint`, or "LiDAR can't measure at this focal length" when a wide lens needs the ultra wide; then the simulated focal length, and the ISO, shutter and aperture the phone chose), the gear/lens menu, a toast, and the white capture flash.
 3. **`controls`**, which holds the next three:
    - [`ExposureScale`](MeterViews.md) showing the deviation.
    - Three [`SettingRow`](MeterViews.md)s (`settingRows`).
-   - **`bottomBar`**: last-photo thumbnail (opens Photos), [`ShutterButton`](MeterViews.md), and a reset-metering button.
+   - **`bottomBar`**: last-photo thumbnail (opens Photos), [`ShutterButton`](MeterViews.md), and the reset-metering button (`xmark.viewfinder`). It is enabled, with a yellow icon, only while `canResetMetering`: compensation, AE/AF lock, a focus square or a metering point away from the centre. Otherwise it is disabled and the icon is black.
 
 ## Interactions
 
-- **Tap / long press** set `focusPoint` and call `camera.focusAndExpose(at:lock:)`.
+- **Tap / long press** set `focusPoint` and `meteringPoint` and call `camera.focusAndExpose(at:lock:)`.
 - **Drag** changes compensation: `bias -= deltaY / 110` (110 points per EV). The focus indicator appears at the centre if there is none, and shows its track while dragging.
 - The focus indicator dims after 2 s without interaction (`interactionCount` restarts a `.task(id:)`).
 - Toasts disappear after 2.5 s.

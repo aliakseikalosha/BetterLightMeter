@@ -16,10 +16,11 @@ A `UIViewRepresentable` that shows the live camera feed and turns touches into t
 
 ## Structure
 
-`PreviewView` is the container and owns the gesture recognizers. Inside it, `layerView` has an `AVCaptureVideoPreviewLayer` as its layer. Only `layerView` is scaled when `contentScale < 1`, so the black border around a too-wide simulated lens still receives touches.
+`PreviewView` is the container and owns the gesture recognizers. Inside it, `layerView` has an `AVCaptureVideoPreviewLayer` as its layer. Only `layerView` is scaled when `contentScale` isn't 1, so the black border around a too-wide simulated lens still receives touches. Above 1 (digital zoom while measuring distance) `PreviewView` clips the enlarged picture.
 
 - `layoutSubviews` sets `bounds` and `center` rather than `frame`, because `frame` is undefined while a transform is applied.
 - `setContentScale(_:animated:)` applies a scale transform, animated over 0.25 s from `updateUIView`.
+- `setFrozen(_:)` (from `isFrozen`, which is `camera.isSwitchingCamera`) covers the view with `snapshotView(afterScreenUpdates: false)`, a copy of what is on screen including the video, so the last frame stays while the camera switches. Unfreezing fades the copy out over 0.25 s. It runs first in `updateUIView`, before anything else changes.
 - `devicePoint(for:)` converts a view point to camera coordinates and clamps to 0…1, so taps in the border map to the nearest edge.
 
 ## Rotation

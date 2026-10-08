@@ -8,6 +8,8 @@ struct ContentView: View {
     @State private var presets = PresetStore()
 
     @State private var focusPoint: CGPoint?
+    /// Where the camera focuses and meters, in device coordinates; also where distance is measured.
+    @State private var meteringPoint = Self.centerPoint
     @State private var isDraggingBias = false
     @State private var isIndicatorDimmed = false
     @State private var interactionCount = 0
@@ -26,6 +28,8 @@ struct ContentView: View {
     /// Width of the column holding the controls when the phone is held sideways.
     private let landscapeControlsWidth: CGFloat = 320
 
+    private static let centerPoint = CGPoint(x: 0.5, y: 0.5)
+
     /// iPhones only get a compact height in landscape.
     private var isLandscape: Bool { verticalSizeClass == .compact }
 
@@ -38,6 +42,15 @@ struct ContentView: View {
     /// 35mm equivalent focal length to show in the viewfinder, if simulating the lens.
     private var simulatedFocalLength: Double? {
         settings.simulateLens ? limits.equivalentFocalLength : nil
+    }
+
+    /// Something moved metering away from the centered, unlocked, uncompensated default.
+    private var canResetMetering: Bool {
+        camera.bias != 0 || camera.isAEAFLocked || focusPoint != nil || meteringPoint != Self.centerPoint
+    }
+
+    private var showsDistance: Bool {
+        settings.measureDistance && camera.supportsDistance
     }
 
     var body: some View {
@@ -55,6 +68,17 @@ struct ContentView: View {
         .onAppear { camera.start(); if settings.saveLocation { location.start() } }
         // The focus square is in viewfinder coordinates, which no longer mean the same place.
         .onChange(of: isLandscape) { focusPoint = nil }
+        // A new camera (for a wide lens, or back to the LiDAR one) starts metering at the center.
+        .onChange(of: camera.device) {
+            focusPoint = nil
+            meteringPoint = Self.centerPoint
+        }
+        .onChange(of: meteringPoint, initial: true) { _, point in
+            camera.depth.measure(at: point)
+        }
+        .onChange(of: settings.measureDistance, initial: true) { _, isOn in
+            camera.setMeasuresDistance(isOn)
+        }
         .onChange(of: settings.saveLocation) { _, isOn in
             if isOn { location.start() } else { location.stop() }
         }
@@ -143,6 +167,20 @@ struct ContentView: View {
                 badge("LIVE", color: .white.opacity(0.25), text: .white)
             }
 
+            if camera.supportsDistance {
+                Button {
+                    settings.measureDistance.toggle()
+                } label: {
+                    Image(systemName: "ruler")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(settings.measureDistance ? .yellow : .white)
+                        .frame(width: 36, height: 36)
+                }
+                .accessibilityLabel("Measure Distance")
+                .accessibilityAddTraits(settings.measureDistance ? .isSelected : [])
+                .sensoryFeedback(.selection, trigger: settings.measureDistance)
+            }
+
             Button {
                 isShowingSettings = true
             } label: {
@@ -164,13 +202,16 @@ struct ContentView: View {
                     session: camera.session,
                     device: camera.device,
                     contentScale: camera.previewScale,
+                    isFrozen: camera.isSwitchingCamera,
                     onTap: { point, devicePoint in
                         focusPoint = point
+                        meteringPoint = devicePoint
                         camera.focusAndExpose(at: devicePoint, lock: false)
                         poke()
                     },
                     onLongPress: { point, devicePoint in
                         focusPoint = point
+                        meteringPoint = devicePoint
                         camera.focusAndExpose(at: devicePoint, lock: true)
                         poke()
                     },
@@ -294,9 +335,26 @@ struct ContentView: View {
         .padding(.horizontal, 16)
     }
 
-    /// What the phone camera itself chose, as reference.
+    /// What the phone camera itself chose, as reference, and the distance to the metering point.
     private var cameraReadout: some View {
         VStack(spacing: 4) {
+            if showsDistance, let distance = camera.depth.distance {
+                Label(DistanceFormat.text(meters: distance), systemImage: "ruler")
+                    .font(.system(size: 13, weight: .semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(.black.opacity(0.45), in: Capsule())
+                    .accessibilityLabel("Distance \(DistanceFormat.text(meters: distance))")
+            } else if showsDistance, camera.status == .running, !camera.isSwitchingCamera, !camera.isMeasuringDistance {
+                Text("LiDAR can't measure at this focal length")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.85))
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(.black.opacity(0.4), in: Capsule())
+            }
             if let simulatedFocalLength {
                 Text("≈ \(Int(simulatedFocalLength.rounded())) mm (35mm equiv.)")
                     .font(.system(size: 11, weight: .medium))
@@ -331,15 +389,16 @@ struct ContentView: View {
 
             Button {
                 camera.resetMetering()
+                meteringPoint = Self.centerPoint
                 withAnimation { focusPoint = nil }
             } label: {
-                Image(systemName: "scope")
+                Image(systemName: "dot.circle.viewfinder")
                     .font(.system(size: 20))
+                    .foregroundStyle(canResetMetering ? .yellow : .black)
                     .frame(width: 48, height: 48)
-                    .background(.white.opacity(0.12), in: Circle())
+                    .background(.white.opacity(canResetMetering ? 0.12 : 0.0), in: Circle())
             }
-            .foregroundStyle(.white)
-            .opacity(camera.bias != 0 || camera.isAEAFLocked || focusPoint != nil ? 1 : 0.35)
+            .disabled(!canResetMetering)
             .accessibilityLabel("Reset metering to center")
             .frame(maxWidth: .infinity, alignment: .trailing)
         }

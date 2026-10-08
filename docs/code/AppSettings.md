@@ -14,6 +14,7 @@ An `@Observable` class. Each property writes itself to `UserDefaults` in `didSet
 | `albumID`, `albumTitle` | `albumID`, `albumTitle` | Photos album to save to. `nil` saves to Recents only. |
 | `saveLocation` | `saveLocation` | Geotag saved photos (default `true`). |
 | `simulateLens` | `simulateLens` | Zoom the viewfinder to the lens' field of view (default `true`). |
+| `measureDistance` | `measureDistance` | Measure the distance to the metering point with the LiDAR scanner (default `false`). |
 | `limits` | `limit.<setting>.low/high` | Per-setting user limits as scale indices. |
 
 ### First launch vs. "None"

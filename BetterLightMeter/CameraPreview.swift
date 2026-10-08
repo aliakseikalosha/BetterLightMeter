@@ -8,8 +8,12 @@ struct CameraPreview: UIViewRepresentable {
     let session: AVCaptureSession
     /// The camera feeding `session`; used to keep the picture upright as the phone rotates.
     var device: AVCaptureDevice?
-    /// Below 1 the picture is shrunk inside a black frame (the lens is wider than the phone's).
+    /// Below 1 the picture is shrunk inside a black frame (the lens is wider than the phone's);
+    /// above 1 it is enlarged (digital zoom).
     var contentScale: CGFloat = 1
+    /// Holds the last frame on screen, e.g. while the camera switches, and lets the live picture
+    /// fade back in once it is false again.
+    var isFrozen = false
     /// Point in view coordinates, point in device (0...1) coordinates.
     var onTap: (CGPoint, CGPoint) -> Void
     var onLongPress: (CGPoint, CGPoint) -> Void
@@ -39,6 +43,8 @@ struct CameraPreview: UIViewRepresentable {
     func updateUIView(_ uiView: PreviewView, context: Context) {
         context.coordinator.parent = self
         uiView.setContentScale(contentScale, animated: true)
+        // Before anything else changes, so the frame held is the one from before.
+        uiView.setFrozen(isFrozen)
         uiView.setDevice(device)
         // The connection only exists once the session has its input, which happens after the
         // device is known; every state change of the camera passes through here.
@@ -53,6 +59,8 @@ struct CameraPreview: UIViewRepresentable {
         }
 
         private let layerView = LayerView()
+        /// Snapshot of the picture covering it while frozen.
+        private var frozenView: UIView?
         private var scale: CGFloat = 1
         private var device: AVCaptureDevice?
         private var rotationCoordinator: AVCaptureDevice.RotationCoordinator?
@@ -68,6 +76,8 @@ struct CameraPreview: UIViewRepresentable {
         override init(frame: CGRect) {
             super.init(frame: frame)
             addSubview(layerView)
+            // An enlarged picture must not spill out.
+            clipsToBounds = true
         }
 
         required init?(coder: NSCoder) {
@@ -79,6 +89,25 @@ struct CameraPreview: UIViewRepresentable {
             // Not `frame`: it is undefined while a transform is applied.
             layerView.bounds = CGRect(origin: .zero, size: bounds.size)
             layerView.center = CGPoint(x: bounds.midX, y: bounds.midY)
+            frozenView?.frame = bounds
+        }
+
+        func setFrozen(_ isFrozen: Bool) {
+            if isFrozen {
+                // `afterScreenUpdates: false` copies what is on screen now, video included.
+                guard frozenView == nil, window != nil,
+                      let snapshot = snapshotView(afterScreenUpdates: false) else { return }
+                snapshot.frame = bounds
+                // Touches still reach this view's gesture recognizers.
+                snapshot.isUserInteractionEnabled = false
+                addSubview(snapshot)
+                frozenView = snapshot
+            } else if let snapshot = frozenView {
+                frozenView = nil
+                UIView.animate(withDuration: 0.25, animations: { snapshot.alpha = 0 }) { _ in
+                    snapshot.removeFromSuperview()
+                }
+            }
         }
 
         override func didMoveToWindow() {

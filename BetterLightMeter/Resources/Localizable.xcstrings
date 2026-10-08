@@ -502,6 +502,22 @@
         }
       }
     },
+    "Distance %@" : {
+      "localizations" : {
+        "be" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Адлегласьць %@"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vzdálenost %@"
+          }
+        }
+      }
+    },
     "Done" : {
       "localizations" : {
         "be" : {
@@ -731,6 +747,22 @@
         }
       }
     },
+    "LiDAR can't measure at this focal length" : {
+      "localizations" : {
+        "be" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "LiDAR ня можа мераць пры гэтай фокуснай адлегласьці"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "LiDAR při této ohniskové vzdálenosti neměří"
+          }
+        }
+      }
+    },
     "Light Meter" : {
       "localizations" : {
         "be" : {
@@ -823,6 +855,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "RUČNĚ"
+          }
+        }
+      }
+    },
+    "Measure Distance" : {
+      "localizations" : {
+        "be" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Мераць адлегласьць"
+          }
+        },
+        "cs" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Měřit vzdálenost"
           }
         }
       }
