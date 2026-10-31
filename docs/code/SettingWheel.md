@@ -14,6 +14,7 @@ A horizontally scrolling value picker that snaps to the centred value. Each of I
 | `accent` | Colour of the selected value and the marker (yellow when automatic). |
 | `isEnabled` | `false` disables scrolling and tapping. |
 | `isDimmed` | Fades unselected values, e.g. when locked. |
+| `leadingInset` | Width at the leading edge covered by other controls (the lock button); values are masked out there. Defaults to 0. |
 | `onSelect` | Called with the new scale index. |
 | `onDoubleTap` | Called on double tap (reset to auto). |
 

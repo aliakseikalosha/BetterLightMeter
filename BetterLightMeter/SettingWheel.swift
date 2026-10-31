@@ -11,6 +11,8 @@ struct SettingWheel: View {
     let isEnabled: Bool
     /// Fades the unselected values, e.g. for a locked setting.
     let isDimmed: Bool
+    /// Width at the leading edge that is covered by other controls; values are hidden there.
+    let leadingInset: CGFloat
     let onSelect: (Int) -> Void
     let onDoubleTap: () -> Void
 
@@ -23,13 +25,15 @@ struct SettingWheel: View {
     private let itemWidth: CGFloat = 76
 
     init(labels: [String], ids: [Int], selected: Int, accent: Color, isEnabled: Bool,
-         isDimmed: Bool, onSelect: @escaping (Int) -> Void, onDoubleTap: @escaping () -> Void) {
+         isDimmed: Bool, leadingInset: CGFloat = 0,
+         onSelect: @escaping (Int) -> Void, onDoubleTap: @escaping () -> Void) {
         self.labels = labels
         self.ids = ids
         self.selected = selected
         self.accent = accent
         self.isEnabled = isEnabled
         self.isDimmed = isDimmed
+        self.leadingInset = leadingInset
         self.onSelect = onSelect
         self.onDoubleTap = onDoubleTap
         _scrollPosition = State(initialValue: ScrollPosition(id: selected, anchor: .center))
@@ -92,13 +96,18 @@ struct SettingWheel: View {
                 }
             }
         }
-        .mask(
-            LinearGradient(
-                stops: [.init(color: .clear, location: 0), .init(color: .black, location: 0.2),
-                        .init(color: .black, location: 0.8), .init(color: .clear, location: 1)],
-                startPoint: .leading, endPoint: .trailing
-            )
-        )
+        .mask {
+            GeometryReader { geo in
+                let width = max(geo.size.width, 1)
+                let start = min(leadingInset / width, 0.5)
+                let fade = (1 - start) * 0.2
+                LinearGradient(
+                    stops: [.init(color: .clear, location: start), .init(color: .black, location: start + fade),
+                            .init(color: .black, location: 1 - fade), .init(color: .clear, location: 1)],
+                    startPoint: .leading, endPoint: .trailing
+                )
+            }
+        }
         .overlay(alignment: .top) {
             Image(systemName: "arrowtriangle.down.fill")
                 .font(.system(size: 7))

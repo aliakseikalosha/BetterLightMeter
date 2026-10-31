@@ -32,7 +32,7 @@ ExposureScale(deviation: meter.deviation)
 
 ## SettingRow
 
-One row per `ExposureSetting`: a lock button on the left and a [`SettingWheel`](SettingWheel.md) on the right.
+One row per `ExposureSetting`: a [`SettingWheel`](SettingWheel.md) spanning the whole row, so its centre marker lines up with 0 on the `ExposureScale`, with a lock button on top of its leading edge.
 
 The caption under the setting name is derived from the [`ExposureModel`](ExposureModel.md):
 

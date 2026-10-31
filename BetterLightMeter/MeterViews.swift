@@ -101,12 +101,33 @@ struct SettingRow: View {
 
     @State private var resetTicks = 0
 
+    private let lockWidth: CGFloat = 74
+
     var body: some View {
         let isLocked = meter.isLocked(setting)
         let isAuto = meter.adjusting == setting
         let isManual = meter.adjusting == nil && !isLocked
 
-        HStack(spacing: 4) {
+        // The wheel spans the whole row so its centre lines up with 0 on the exposure scale;
+        // the lock button sits on top of its leading edge.
+        ZStack(alignment: .leading) {
+            SettingWheel(
+                labels: setting.scale.labels,
+                ids: meter.allowedIndices(for: setting),
+                selected: meter.index(of: setting),
+                accent: isAuto ? .yellow : .white,
+                isEnabled: meter.isEditable(setting),
+                isDimmed: isLocked,
+                leadingInset: lockWidth,
+                onSelect: { meter.select($0, for: setting) },
+                onDoubleTap: {
+                    if meter.canResetToAuto(setting) {
+                        meter.resetToAuto(setting)
+                        resetTicks += 1
+                    }
+                }
+            )
+
             Button {
                 meter.toggleLock(setting)
             } label: {
@@ -126,27 +147,11 @@ struct SettingRow: View {
                         .opacity(0.8)
                 }
                 .foregroundStyle(isLocked ? Color.yellow : .white.opacity(0.6))
-                .frame(width: 70, height: 50)
+                .frame(width: lockWidth, height: 50)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .sensoryFeedback(.impact(weight: .light), trigger: isLocked)
-
-            SettingWheel(
-                labels: setting.scale.labels,
-                ids: meter.allowedIndices(for: setting),
-                selected: meter.index(of: setting),
-                accent: isAuto ? .yellow : .white,
-                isEnabled: meter.isEditable(setting),
-                isDimmed: isLocked,
-                onSelect: { meter.select($0, for: setting) },
-                onDoubleTap: {
-                    if meter.canResetToAuto(setting) {
-                        meter.resetToAuto(setting)
-                        resetTicks += 1
-                    }
-                }
-            )
         }
         .frame(height: 50)
         .background(
