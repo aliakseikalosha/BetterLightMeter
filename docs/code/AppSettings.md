@@ -12,6 +12,8 @@ An `@Observable` class. Each property writes itself to `UserDefaults` in `didSet
 | --- | --- | --- |
 | `cameraName`, `lensName` | `cameraName`, `lensName` | Selected presets. `nil` means "None". |
 | `albumID`, `albumTitle` | `albumID`, `albumTitle` | Photos album to save to. `nil` saves to Recents only. |
+| `usesDefaultAlbum` | `usesDefaultAlbum` | Save to the app's own `BetterLightMeter` album (default `true`, or `false` if an album was already picked). `resolveDefaultAlbum()` finds or creates it and fills in `albumID` and `albumTitle`. Picking anything in Settings turns this off. |
+| `lastPhotoID` | `lastPhotoID` | Photos identifier of the picture the app saved last. |
 | `saveLocation` | `saveLocation` | Geotag saved photos (default `true`). |
 | `simulateLens` | `simulateLens` | Zoom the viewfinder to the lens' field of view (default `true`). |
 | `measureDistance` | `measureDistance` | Measure the distance to the metering point with the LiDAR scanner (default `false`). |

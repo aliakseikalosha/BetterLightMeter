@@ -14,12 +14,17 @@ let granted = await PhotoLibrary.requestAccess()   // read/write; .limited count
 let albums = PhotoLibrary.albums()                  // user albums that accept content, sorted by title
 let album = try await PhotoLibrary.createAlbum(named: "Light Meter")
 
-try await PhotoLibrary.save(jpeg: data, toAlbum: album.id, location: location)
+let appAlbum = await PhotoLibrary.defaultAlbum()    // the "BetterLightMeter" album, created if needed
+
+let id = try await PhotoLibrary.save(jpeg: data, toAlbum: album.id, location: location)
+let thumbnail = await PhotoLibrary.lastPhotoThumbnail(id: id)
 ```
 
-- `save` always adds the photo to the library and, if the album still exists, to the album too. A missing album is skipped silently.
+- `save` always adds the photo to the library and, if the album still exists, to the album too. A missing album is skipped silently. It returns the new picture's Photos identifier.
 - Both `save` and `createAlbum` throw `PhotoLibraryError.accessDenied` without permission.
-- `IdentifierBox` carries the new album's identifier out of the `performChanges` closure.
+- `defaultAlbum` returns `nil` without full access, so with limited access photos go to Recents only.
+- `lastPhotoThumbnail` shows the picture with that identifier or, if it was deleted or the identifier is unknown (after reinstalling), the newest picture in the app's album. It returns `nil` if there is neither, and never asks for permission.
+- `IdentifierBox` carries the new identifier out of the `performChanges` closure.
 
 ## LocationProvider
 

@@ -30,6 +30,16 @@ final class AppSettings {
         didSet { defaults.set(albumTitle, forKey: "albumTitle") }
     }
 
+    /// Whether to save to the app's own album, because the user hasn't picked anything else.
+    var usesDefaultAlbum: Bool {
+        didSet { defaults.set(usesDefaultAlbum, forKey: "usesDefaultAlbum") }
+    }
+
+    /// Photos identifier of the picture the app saved last.
+    var lastPhotoID: String? {
+        didSet { defaults.set(lastPhotoID, forKey: "lastPhotoID") }
+    }
+
     /// Whether photos are geotagged (needs location permission too).
     var saveLocation: Bool {
         didSet { defaults.set(saveLocation, forKey: "saveLocation") }
@@ -57,8 +67,15 @@ final class AppSettings {
             cameraName = Self.defaultCameraName
             lensName = Self.defaultLensName
         }
-        albumID = defaults.string(forKey: "albumID")
+        let storedAlbumID = defaults.string(forKey: "albumID")
+        albumID = storedAlbumID
         albumTitle = defaults.string(forKey: "albumTitle")
+        // An album picked before the default album existed stays selected. Stored right away,
+        // because using the default album fills in `albumID` too.
+        let storedUsesDefaultAlbum = defaults.object(forKey: "usesDefaultAlbum") as? Bool ?? (storedAlbumID == nil)
+        defaults.set(storedUsesDefaultAlbum, forKey: "usesDefaultAlbum")
+        usesDefaultAlbum = storedUsesDefaultAlbum
+        lastPhotoID = defaults.string(forKey: "lastPhotoID")
         for setting in ExposureSetting.allCases {
             let full = setting.allIndices
             let low = defaults.object(forKey: "limit.\(setting).low") as? Int ?? full.first!
@@ -71,6 +88,15 @@ final class AppSettings {
     func selectCamera(_ camera: CameraPreset?) {
         cameraName = camera?.name
         lensName = camera?.lenses.first?.name
+    }
+
+    /// Points `albumID` at the app's own album if that's the one in use, creating it if needed.
+    @MainActor
+    func resolveDefaultAlbum() async {
+        guard usesDefaultAlbum else { return }
+        let album = await PhotoLibrary.defaultAlbum()
+        albumID = album?.id
+        albumTitle = album?.title
     }
 
     func limit(for setting: ExposureSetting) -> ClosedRange<Int> {

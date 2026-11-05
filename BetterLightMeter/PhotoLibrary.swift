@@ -17,6 +17,9 @@ enum PhotoLibraryError: LocalizedError {
 
 /// Saving photos and managing albums in the user's Photos library.
 enum PhotoLibrary {
+    /// Name of the album photos are saved to until the user picks another.
+    static let defaultAlbumTitle = "BetterLightMeter"
+
     static func requestAccess() async -> Bool {
         let status = await PHPhotoLibrary.requestAuthorization(for: .readWrite)
         return status == .authorized || status == .limited
@@ -44,22 +47,62 @@ enum PhotoLibrary {
         return PhotoAlbum(id: identifier.value, title: title)
     }
 
+    /// The app's own album, created if it doesn't exist yet. Needs full access, because
+    /// albums can't be listed with limited access; photos then go to Recents only.
+    static func defaultAlbum() async -> PhotoAlbum? {
+        guard await PHPhotoLibrary.requestAuthorization(for: .readWrite) == .authorized else { return nil }
+        if let album = albums().first(where: { $0.title == defaultAlbumTitle }) { return album }
+        return try? await createAlbum(named: defaultAlbumTitle)
+    }
+
     /// Saves JPEG data to the library and, if given and still present, to an album.
-    static func save(jpeg data: Data, toAlbum albumID: String?, location: CLLocation? = nil) async throws {
+    /// - Returns: The Photos identifier of the new picture.
+    static func save(jpeg data: Data, toAlbum albumID: String?, location: CLLocation? = nil) async throws -> String {
         guard await requestAccess() else { throw PhotoLibraryError.accessDenied }
         let album = albumID.flatMap {
             PHAssetCollection.fetchAssetCollections(withLocalIdentifiers: [$0], options: nil).firstObject
         }
+        let identifier = IdentifierBox()
         try await PHPhotoLibrary.shared().performChanges {
             let request = PHAssetCreationRequest.forAsset()
             request.addResource(with: .photo, data: data, options: nil)
             request.location = location
-            if let album,
-               let placeholder = request.placeholderForCreatedAsset,
-               let albumRequest = PHAssetCollectionChangeRequest(for: album) {
-                albumRequest.addAssets([placeholder] as NSArray)
+            if let placeholder = request.placeholderForCreatedAsset {
+                identifier.value = placeholder.localIdentifier
+                if let album, let albumRequest = PHAssetCollectionChangeRequest(for: album) {
+                    albumRequest.addAssets([placeholder] as NSArray)
+                }
             }
         }
+        return identifier.value
+    }
+
+    /// Thumbnail of the picture the app saved last: `id` or, if that was deleted or is unknown
+    /// (after reinstalling), the newest in the app's album. Never asks for access.
+    static func lastPhotoThumbnail(id: String?) async -> UIImage? {
+        let status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+        guard status == .authorized || status == .limited else { return nil }
+        let saved = id.flatMap { PHAsset.fetchAssets(withLocalIdentifiers: [$0], options: nil).firstObject }
+        guard let asset = saved ?? newestInDefaultAlbum() else { return nil }
+
+        let options = PHImageRequestOptions()
+        // Calls back exactly once, and fetches photos that only exist in iCloud.
+        options.deliveryMode = .highQualityFormat
+        options.isNetworkAccessAllowed = true
+        return await withCheckedContinuation { continuation in
+            PHImageManager.default().requestImage(for: asset, targetSize: CGSize(width: 192, height: 192), contentMode: .aspectFill, options: options) { image, _ in
+                continuation.resume(returning: image)
+            }
+        }
+    }
+
+    private static func newestInDefaultAlbum() -> PHAsset? {
+        guard let album = albums().first(where: { $0.title == defaultAlbumTitle }),
+              let collection = PHAssetCollection.fetchAssetCollections(withLocalIdentifiers: [album.id], options: nil).firstObject else { return nil }
+        let options = PHFetchOptions()
+        options.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
+        options.fetchLimit = 1
+        return PHAsset.fetchAssets(in: collection, options: options).firstObject
     }
 
     private final class IdentifierBox: @unchecked Sendable {

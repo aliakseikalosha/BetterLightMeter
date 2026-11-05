@@ -101,6 +101,13 @@ struct ContentView: View {
         .sheet(isPresented: $isShowingSettings) {
             SettingsView(settings: settings, presets: presets)
         }
+        // On launch, and on return from Photos, where the last photo may have been deleted.
+        .task(id: scenePhase) {
+            guard scenePhase == .active else { return }
+            let thumbnail = await PhotoLibrary.lastPhotoThumbnail(id: settings.lastPhotoID)
+            guard !Task.isCancelled else { return }
+            lastPhoto = thumbnail
+        }
         .task(id: toast) {
             guard toast != nil else { return }
             try? await Task.sleep(for: .seconds(2.5))
@@ -406,7 +413,7 @@ struct ContentView: View {
         .padding(.vertical, isLandscape ? 6 : 12)
     }
 
-    /// Preview of the last captured photo; opens the Photos app.
+    /// Preview of the last photo the app saved; opens the Photos app. Empty if there is none.
     @ViewBuilder
     private var thumbnailButton: some View {
         if let lastPhoto {
@@ -422,9 +429,8 @@ struct ContentView: View {
             }
             .accessibilityLabel("Last photo")
         } else {
-            RoundedRectangle(cornerRadius: 8)
-                .fill(.white.opacity(0.12))
-                .frame(width: 48, height: 48)
+            // Holds the slot so the shutter button stays centred.
+            Color.clear
                 .accessibilityHidden(true)
         }
     }
@@ -488,8 +494,6 @@ struct ContentView: View {
             lens: selectedLens?.name,
             summary: "\(headline)  ·  \(detailsLine)"
         )
-        let albumID = settings.albumID
-        let albumTitle = settings.albumTitle
         let photoLocation = settings.saveLocation ? location.currentLocation : nil
 
         Task {
@@ -500,7 +504,9 @@ struct ContentView: View {
                     PhotoStamper.stamp(photo, headline: headline, details: detailsLine).jpegData(compressionQuality: 0.92)
                 }.value
                 guard let jpeg else { throw CocoaError(.fileWriteUnknown) }
-                try await PhotoLibrary.save(jpeg: metadata.embedded(in: jpeg), toAlbum: albumID, location: photoLocation)
+                await settings.resolveDefaultAlbum()
+                let albumTitle = settings.albumTitle
+                settings.lastPhotoID = try await PhotoLibrary.save(jpeg: metadata.embedded(in: jpeg), toAlbum: settings.albumID, location: photoLocation)
                 let thumbnail = await Task.detached(priority: .utility) {
                     UIImage(data: jpeg)?.preparingThumbnail(of: CGSize(width: 192, height: 192))
                 }.value

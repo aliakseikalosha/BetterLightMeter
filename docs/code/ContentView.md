@@ -71,7 +71,7 @@ Keep it one tree. An earlier version switched between two `if` branches, which d
 3. **`controls`**, which holds the next three:
    - [`ExposureScale`](MeterViews.md) showing the deviation.
    - Three [`SettingRow`](MeterViews.md)s (`settingRows`).
-   - **`bottomBar`**: last-photo thumbnail (opens Photos), [`ShutterButton`](MeterViews.md), and the reset-metering button (`xmark.viewfinder`). It is enabled, with a yellow icon, only while `canResetMetering`: compensation, AE/AF lock, a focus square or a metering point away from the centre. Otherwise it is disabled and the icon is black.
+   - **`bottomBar`**: last-photo thumbnail (opens Photos; empty if the app has no saved photo, and reloaded whenever the app becomes active), [`ShutterButton`](MeterViews.md), and the reset-metering button (`xmark.viewfinder`). It is enabled, with a yellow icon, only while `canResetMetering`: compensation, AE/AF lock, a focus square or a metering point away from the centre. Otherwise it is disabled and the icon is black.
 
 ## Interactions
 
@@ -83,16 +83,17 @@ Keep it one tree. An earlier version switched between two `if` branches, which d
 ## takePicture()
 
 1. Ignores the press if a capture is running. Flashes the screen.
-2. Snapshots the reading *at press time*: the headline (`ISO 400   1/125   f/8`), the details line (EV, deviation, camera, lens, date), `PhotoMetadata`, album and location.
-3. In a `Task`: `camera.capturePhoto()` → stamp and JPEG-encode off the main actor (`PhotoStamper.stamp`) → `metadata.embedded(in:)` → `PhotoLibrary.save`.
+2. Snapshots the reading *at press time*: the headline (`ISO 400   1/125   f/8`), the details line (EV, deviation, camera, lens, date), `PhotoMetadata` and location.
+3. In a `Task`: `camera.capturePhoto()` → stamp and JPEG-encode off the main actor (`PhotoStamper.stamp`) → `settings.resolveDefaultAlbum()` → `metadata.embedded(in:)` → `PhotoLibrary.save`, remembering the result in `settings.lastPhotoID`.
 4. Updates the thumbnail and shows "Saved to …", or an error toast.
 
 ```swift
 let photo = try await camera.capturePhoto()
 let jpeg = PhotoStamper.stamp(photo, headline: headline, details: detailsLine)
     .jpegData(compressionQuality: 0.92)
-try await PhotoLibrary.save(jpeg: metadata.embedded(in: jpeg!),
-                            toAlbum: albumID, location: photoLocation)
+await settings.resolveDefaultAlbum()
+settings.lastPhotoID = try await PhotoLibrary.save(jpeg: metadata.embedded(in: jpeg!),
+                                                   toAlbum: settings.albumID, location: photoLocation)
 ```
 
 `shutterText(_:)` formats the phone's own exposure time (`1/250`, or `0.8"` for half a second and longer).

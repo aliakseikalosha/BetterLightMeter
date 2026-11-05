@@ -171,6 +171,7 @@ struct SettingsView: View {
             Picker("Save to", selection: Binding(
                 get: { settings.albumID },
                 set: { id in
+                    settings.usesDefaultAlbum = false
                     settings.albumID = id
                     settings.albumTitle = albums.first { $0.id == id }?.title
                 }
@@ -262,6 +263,7 @@ struct SettingsView: View {
             photoAccessDenied = true
             return
         }
+        await settings.resolveDefaultAlbum()
         albums = PhotoLibrary.albums()
         if let id = settings.albumID, let album = albums.first(where: { $0.id == id }) {
             settings.albumTitle = album.title
@@ -274,6 +276,7 @@ struct SettingsView: View {
         do {
             let album = try await PhotoLibrary.createAlbum(named: name)
             albums = PhotoLibrary.albums()
+            settings.usesDefaultAlbum = false
             settings.albumID = album.id
             settings.albumTitle = album.title
         } catch {
